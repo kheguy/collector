@@ -11,6 +11,7 @@ import (
 var (
 	parseFloatError = errors.New("can't parse gauge string to float64")
 	parseIntError   = errors.New("can't parse counter string to int")
+	uknownTypeError = errors.New("unknown metric type")
 )
 
 type MetricsService struct {
@@ -45,6 +46,8 @@ func (s *MetricsService) UpdateMetrics(name string, typeOfValue string, value in
 				return parseIntError
 			}
 		}
+	default:
+		return uknownTypeError
 	}
 
 	s.Storage.Set(name, typeOfValue, parsedValue)
