@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -12,6 +13,30 @@ const (
 	gaugeType   = "gauge"
 	counterType = "counter"
 )
+
+func parseValue(value interface{}, typeOfValue string) (interface{}, error) {
+	switch typeOfValue {
+	case gaugeType:
+		if str, ok := value.(string); ok {
+			if val, err := strconv.ParseFloat(str, 64); err == nil {
+				return val, nil
+			} else {
+				return 0, errors.New("can't parse gauge string to float64")
+			}
+		}
+
+	case counterType:
+		if str, ok := value.(string); ok {
+			if val, err := strconv.Atoi(str); err == nil {
+				return val, nil
+			} else {
+				return 0, errors.New("can't parse counter string to int")
+			}
+		}
+	}
+
+	return 0, errors.New("uknown type")
+}
 
 type MemStorage struct {
 	Data map[string]interface{}
@@ -28,29 +53,12 @@ func (s MemStorage) Get(name string) interface{} {
 func (s MemStorage) Set(name string, mType string, value interface{}) interface{} {
 	switch mType {
 	case gaugeType:
-		if str, ok := value.(string); ok {
-			if val, err := strconv.ParseFloat(str, 64); err == nil {
-				s.Data[name] = val
-			}
-		} else {
-			s.Data[name] = value.(float64)
-		}
-
+		s.Data[name] = value.(float64)
 	case counterType:
 		if s.Data[name] == nil {
 			s.Data[name] = 0
 		}
-
-		var intVal int
-		if str, ok := value.(string); ok {
-			if val, err := strconv.Atoi(str); err == nil {
-				intVal = val
-			}
-		} else {
-			intVal = value.(int)
-		}
-
-		s.Data[name] = s.Data[name].(int) + intVal
+		s.Data[name] = s.Data[name].(int) + value.(int)
 	}
 
 	fmt.Printf("New value is set to %s for %s\n", value, name)
@@ -74,21 +82,22 @@ func updateRoute(res http.ResponseWriter, req *http.Request) {
 
 	mType := req.PathValue("type")
 	value := req.PathValue("value")
+	parsedValue, err := parseValue(value, mType)
 
-	if (mType != gaugeType && mType != counterType) || len(value) == 0 {
+	if err != nil {
 		http.Error(res, "Bad request", http.StatusBadRequest)
 		return
 	}
 
-	storage.Set(name, mType, value)
+	storage.Set(name, mType, parsedValue)
 
 	res.WriteHeader(http.StatusOK)
 	res.Write([]byte(`OK`))
 }
 
 func notFoundRoute(res http.ResponseWriter, req *http.Request) {
-	res.Write([]byte(`Not found`))
 	res.WriteHeader(http.StatusNotFound)
+	res.Write([]byte(`Not found`))
 }
 
 func main() {
