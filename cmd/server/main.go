@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"net/http"
+	"strconv"
 )
 
 var port int = 8080
@@ -27,10 +28,33 @@ func (s MemStorage) Get(name string) interface{} {
 func (s MemStorage) Set(name string, mType string, value interface{}) interface{} {
 	switch mType {
 	case gaugeType:
-		s.Data[name] = value.(float64)
+		if str, ok := value.(string); ok {
+			if val, err := strconv.ParseFloat(str, 64); err == nil {
+				s.Data[name] = val
+			}
+		} else {
+			s.Data[name] = value.(float64)
+		}
+
 	case counterType:
-		s.Data[name] = s.Data[name].(int) + value.(int)
+		if s.Data[name] == nil {
+			s.Data[name] = 0
+		}
+
+		var intVal int
+		if str, ok := value.(string); ok {
+			if val, err := strconv.Atoi(str); err == nil {
+				intVal = val
+			}
+		} else {
+			intVal = value.(int)
+		}
+
+		s.Data[name] = s.Data[name].(int) + intVal
 	}
+
+	fmt.Printf("New value is set to %s for %s\n", value, name)
+	fmt.Printf("Store state is %v\n", s.Data)
 
 	return s.Data[name]
 }
