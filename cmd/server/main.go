@@ -43,7 +43,7 @@ func updateRoute(res http.ResponseWriter, req *http.Request) {
 
 	name := req.PathValue("name")
 
-	if name != "" {
+	if name == "" {
 		http.Error(res, "Name is required", http.StatusNotFound)
 		return
 	}
