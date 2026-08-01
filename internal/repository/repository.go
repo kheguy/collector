@@ -1,8 +1,6 @@
 package repository
 
 import (
-	"fmt"
-
 	models "github.com/kheguy/collector/internal/model"
 )
 
@@ -33,8 +31,12 @@ func (s *MemStorage) Set(name string, mType string, value interface{}) interface
 		s.Data[name] = s.Data[name].(int) + value.(int)
 	}
 
-	fmt.Printf("New value is set to %s for %s\n", value, name)
-	fmt.Printf("Store state is %v\n", s.Data)
+	// fmt.Printf("New value is set to %s for %s\n", value, name)
+	// fmt.Printf("Store state is %v\n", s.Data)
 
 	return s.Data[name]
+}
+
+func (s *MemStorage) GetAll() map[string]interface{} {
+	return s.Data
 }

@@ -22,6 +22,8 @@ func (h *MetricsHandler) UpdateHandler(res http.ResponseWriter, req *http.Reques
 		return
 	}
 
+	// fmt.Printf("Got request %s\n", req.URL)
+
 	name := req.PathValue("name")
 	typeOfValue := req.PathValue("type")
 	value := req.PathValue("value")
