@@ -24,6 +24,24 @@ func MakeNewMetricsService(s *repository.MemStorage) *MetricsService {
 	}
 }
 
+func (s *MetricsService) GetMetric(name string) string {
+	value := s.Storage.Get(name)
+
+	if value == nil {
+		return ""
+	}
+
+	if name == "PollCount" {
+		return strconv.Itoa(value.(int))
+	} else {
+		return strconv.FormatFloat(value.(float64), 'f', -1, 64)
+	}
+}
+
+func (s *MetricsService) GetAllMetrics() map[string]interface{} {
+	return s.Storage.GetAll()
+}
+
 func (s *MetricsService) UpdateMetrics(name string, typeOfValue string, value interface{}) error {
 
 	var parsedValue interface{}

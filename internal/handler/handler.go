@@ -1,7 +1,9 @@
 package handler
 
 import (
+	"fmt"
 	"net/http"
+	"strconv"
 
 	"github.com/kheguy/collector/internal/service"
 )
@@ -16,12 +18,28 @@ func MakeNewMetricsHandler(s *service.MetricsService) *MetricsHandler {
 	}
 }
 
-func (h *MetricsHandler) UpdateHandler(res http.ResponseWriter, req *http.Request) {
-	if req.Method != http.MethodPost {
-		http.Error(res, "Method not allowed", http.StatusMethodNotAllowed)
+func (h *MetricsHandler) ValueHandler(res http.ResponseWriter, req *http.Request) {
+	name := req.PathValue("name")
+	// Как будто оно тут и не нужно?
+	// typeOfValue := req.PathValue("type")
+
+	if name == "" {
+		http.Error(res, "Name is required", http.StatusBadRequest)
 		return
 	}
 
+	metricValue := h.Service.GetMetric(name)
+
+	if metricValue == "" {
+		http.Error(res, "Not foud", http.StatusNotFound)
+		return
+	}
+
+	res.WriteHeader(http.StatusOK)
+	res.Write([]byte(metricValue))
+}
+
+func (h *MetricsHandler) UpdateHandler(res http.ResponseWriter, req *http.Request) {
 	// fmt.Printf("Got request %s\n", req.URL)
 
 	name := req.PathValue("name")
@@ -42,6 +60,25 @@ func (h *MetricsHandler) UpdateHandler(res http.ResponseWriter, req *http.Reques
 
 	res.WriteHeader(http.StatusOK)
 	res.Write([]byte(`OK`))
+}
+
+func (h *MetricsHandler) HTMLListHandler(res http.ResponseWriter, req *http.Request) {
+
+	htmlString := "<table><thead><th>Name</th><th>Value</th></thead><tbody>"
+	for name, value := range h.Service.GetAllMetrics() {
+		var mValue string
+		if name == "PollCount" {
+			mValue = strconv.Itoa(value.(int))
+		} else {
+			mValue = strconv.FormatFloat(value.(float64), 'f', -1, 64)
+		}
+
+		htmlString += fmt.Sprintf(`<tr><td>%s</td><td>%s</td></tr>`, name, mValue)
+	}
+
+	htmlString += `</tbody></table>`
+	res.WriteHeader(http.StatusOK)
+	res.Write([]byte(htmlString))
 }
 
 func (h *MetricsHandler) NotFoundHandler(res http.ResponseWriter, req *http.Request) {

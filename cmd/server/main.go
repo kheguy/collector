@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"net/http"
 
+	"github.com/go-chi/chi/v5"
+
 	"github.com/kheguy/collector/internal/config"
 	"github.com/kheguy/collector/internal/handler"
 	"github.com/kheguy/collector/internal/repository"
@@ -11,6 +13,8 @@ import (
 )
 
 func main() {
+	r := chi.NewRouter()
+
 	config := config.Load()
 
 	storage := repository.MakeNewMemoryStorage()
@@ -19,12 +23,12 @@ func main() {
 
 	metricsHandler := handler.MakeNewMetricsHandler(metricsService)
 
-	mux := http.NewServeMux()
-	mux.HandleFunc(`/update/{type}/{name}/{value}`, metricsHandler.UpdateHandler)
-	mux.HandleFunc(`/`, metricsHandler.NotFoundHandler)
+	r.Post(`/update/{type}/{name}/{value}`, metricsHandler.UpdateHandler)
+	r.Get(`/value/{type}/{name}`, metricsHandler.ValueHandler)
+	r.Get(`/`, metricsHandler.HTMLListHandler)
 
 	fmt.Printf("Server started on port %d\n", config.Port)
-	err := http.ListenAndServe(fmt.Sprintf(":%d", config.Port), mux)
+	err := http.ListenAndServe(fmt.Sprintf(":%d", config.Port), r)
 
 	if err != nil {
 		panic(err)
