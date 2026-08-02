@@ -28,7 +28,7 @@ func (s *MemStorage) Set(name string, mType string, value interface{}) interface
 		if s.Data[name] == nil {
 			s.Data[name] = 0
 		}
-		s.Data[name] = s.Data[name].(int) + value.(int)
+		s.Data[name] = value.(int)
 	}
 
 	// fmt.Printf("New value is set to %s for %s\n", value, name)

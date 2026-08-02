@@ -20,15 +20,17 @@ type Agent struct {
 	getTicker  *time.Ticker
 	sendTicker *time.Ticker
 	stopChan   chan bool
-	config     config.Config
+	url        string
+	httpClient http.Client
 }
 
-func NewAgent(storage *repository.MemStorage) *Agent {
+func NewAgent(storage *repository.MemStorage, url string, httpClient http.Client) *Agent {
 	return &Agent{
-		storage:   storage,
-		pollCount: 0,
-		stopChan:  make(chan bool),
-		config:    config.Load(),
+		storage:    storage,
+		pollCount:  0,
+		stopChan:   make(chan bool),
+		url:        url,
+		httpClient: httpClient,
 	}
 }
 
@@ -54,7 +56,7 @@ func (a *Agent) Start(pollInterval time.Duration, reportInterval time.Duration) 
 						mValue = strconv.FormatFloat(value.(float64), 'f', -1, 64)
 					}
 
-					_, err := http.Post(fmt.Sprintf("http://%s:%d/update/%s/%s/%s", a.config.Host, a.config.Port, mType, name, mValue), "plain/text", strings.NewReader(""))
+					_, err := a.httpClient.Post(fmt.Sprintf("%s/update/%s/%s/%s", a.url, mType, name, mValue), "plain/text", strings.NewReader(""))
 
 					if err != nil {
 						fmt.Printf("Request error: \n%s\n", err.Error())
@@ -82,7 +84,7 @@ func (a *Agent) collectMetrics() {
 	a.collectCustomMetrics()
 
 	fmt.Printf("Metrics are updated pollCount: %d, time is: %s\n",
-		a.pollCount, time.Now().Format("15:04:05"))
+		a.pollCount, time.Now().Format("1:04:05"))
 }
 
 func (a *Agent) collectRuntimeMetrics() {
@@ -129,7 +131,6 @@ func (a *Agent) collectCustomMetrics() {
 	if pollCount == nil {
 		pollCount = 0
 	}
-
 	a.storage.Set("PollCount", models.Counter, pollCount.(int)+1)
 
 	randomValue := rand.Float64() * 100
@@ -138,8 +139,9 @@ func (a *Agent) collectCustomMetrics() {
 
 func main() {
 	storage := repository.MakeNewMemoryStorage()
+	config := config.Load()
 
-	agent := NewAgent(storage)
+	agent := NewAgent(storage, fmt.Sprintf("http://%s:%d", config.Host, config.Port), *http.DefaultClient)
 
 	agent.Start(2*time.Second, 5*time.Second)
 
