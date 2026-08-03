@@ -64,6 +64,8 @@ func (a *Agent) Start(pollInterval time.Duration, reportInterval time.Duration) 
 						fmt.Printf("Request error: \n%s\n", err.Error())
 						a.Stop()
 					}
+
+					a.storage.Clear()
 				}
 
 			case <-a.stopChan:
@@ -133,7 +135,7 @@ func (a *Agent) collectCustomMetrics() {
 	if pollCount == nil {
 		pollCount = 0
 	}
-	a.storage.Set("PollCount", models.Counter, pollCount.(int)+1)
+	a.storage.Set("PollCount", models.Counter, 1)
 
 	randomValue := rand.Float64() * 100
 	a.storage.Set("RandomValue", models.Gauge, randomValue)
