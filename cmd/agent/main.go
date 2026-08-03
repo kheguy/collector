@@ -57,7 +57,7 @@ func (a *Agent) Start(pollInterval time.Duration, reportInterval time.Duration) 
 						mValue = strconv.FormatFloat(value.(float64), 'f', -1, 64)
 					}
 
-					_, err := a.httpClient.Post(fmt.Sprintf("%s/update/%s/%s/%s", a.url, mType, name, mValue), "plain/text", strings.NewReader(""))
+					_, err := a.httpClient.Post(fmt.Sprintf("http://%s/update/%s/%s/%s", a.url, mType, name, mValue), "plain/text", strings.NewReader(""))
 
 					if err != nil {
 						fmt.Printf("Request error: \n%s\n", err.Error())
