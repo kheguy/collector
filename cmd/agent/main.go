@@ -1,15 +1,16 @@
 package main
 
 import (
+	"flag"
 	"fmt"
 	"math/rand"
 	"net/http"
+	"os"
 	"runtime"
 	"strconv"
 	"strings"
 	"time"
 
-	"github.com/kheguy/collector/internal/config"
 	models "github.com/kheguy/collector/internal/model"
 	"github.com/kheguy/collector/internal/repository"
 )
@@ -138,12 +139,23 @@ func (a *Agent) collectCustomMetrics() {
 }
 
 func main() {
+
+	var appFlags = flag.NewFlagSet("app", flag.ExitOnError)
+	var (
+		address        = appFlags.String("a", "localhost:8080", "Address of the server")
+		reportInterval = appFlags.Int("r", 10, "Report interval")
+		pollInterval   = appFlags.Int("p", 2, "Poll interval")
+	)
+
+	if err := appFlags.Parse(os.Args[1:]); err != nil {
+		panic("Unknown flags")
+	}
+
 	storage := repository.MakeNewMemoryStorage()
-	config := config.Load()
 
-	agent := NewAgent(storage, fmt.Sprintf("http://%s:%d", config.Host, config.Port), *http.DefaultClient)
+	agent := NewAgent(storage, *address, *http.DefaultClient)
 
-	agent.Start(2*time.Second, 5*time.Second)
+	agent.Start(time.Duration(*pollInterval)*time.Second, time.Duration(*reportInterval)*time.Second)
 
 	time.Sleep(100000000 * time.Second)
 }

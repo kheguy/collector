@@ -1,21 +1,29 @@
 package main
 
 import (
+	"flag"
 	"fmt"
 	"net/http"
+	"os"
 
 	"github.com/go-chi/chi/v5"
 
-	"github.com/kheguy/collector/internal/config"
 	"github.com/kheguy/collector/internal/handler"
 	"github.com/kheguy/collector/internal/repository"
 	"github.com/kheguy/collector/internal/service"
 )
 
 func main() {
-	r := chi.NewRouter()
+	var appFlags = flag.NewFlagSet("app", flag.ExitOnError)
+	var (
+		address = appFlags.String("a", "localhost:8080", "Address of the server")
+	)
 
-	config := config.Load()
+	if err := appFlags.Parse(os.Args[1:]); err != nil {
+		panic("Unknown flags")
+	}
+
+	r := chi.NewRouter()
 
 	storage := repository.MakeNewMemoryStorage()
 
@@ -27,8 +35,8 @@ func main() {
 	r.Get(`/value/{type}/{name}`, metricsHandler.ValueHandler)
 	r.Get(`/`, metricsHandler.HTMLListHandler)
 
-	fmt.Printf("Server started on port %d\n", config.Port)
-	err := http.ListenAndServe(fmt.Sprintf(":%d", config.Port), r)
+	fmt.Printf("Server started on %s\n", *address)
+	err := http.ListenAndServe(*address, r)
 
 	if err != nil {
 		panic(err)

@@ -1,13 +1,7 @@
 package config
 
-type Config struct {
-	Host string
-	Port int
-}
+type Config struct{}
 
 func Load() Config {
-	return Config{
-		Host: "localhost",
-		Port: 8080,
-	}
+	return Config{}
 }
