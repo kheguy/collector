@@ -49,12 +49,13 @@ func (a *Agent) Start(pollInterval time.Duration, reportInterval time.Duration) 
 					// Не вижу смысла заводить type в store под единственный счетчик
 					var mType string
 					var mValue string
-					if name == "PollCount" {
+					switch v := value.(type) {
+					case int:
 						mType = models.Counter
-						mValue = strconv.Itoa(value.(int))
-					} else {
+						mValue = strconv.Itoa(v)
+					case float64:
 						mType = models.Gauge
-						mValue = strconv.FormatFloat(value.(float64), 'f', -1, 64)
+						mValue = strconv.FormatFloat(v, 'f', -1, 64)
 					}
 
 					_, err := a.httpClient.Post(fmt.Sprintf("%s/update/%s/%s/%s", a.url, mType, name, mValue), "plain/text", strings.NewReader(""))

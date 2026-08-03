@@ -67,10 +67,12 @@ func (h *MetricsHandler) HTMLListHandler(res http.ResponseWriter, req *http.Requ
 	htmlString := "<table><thead><th>Name</th><th>Value</th></thead><tbody>"
 	for name, value := range h.Service.GetAllMetrics() {
 		var mValue string
-		if name == "PollCount" {
-			mValue = strconv.Itoa(value.(int))
-		} else {
-			mValue = strconv.FormatFloat(value.(float64), 'f', -1, 64)
+
+		switch v := value.(type) {
+		case int:
+			mValue = strconv.Itoa(v)
+		case float64:
+			mValue = strconv.FormatFloat(v, 'f', -1, 64)
 		}
 
 		htmlString += fmt.Sprintf(`<tr><td>%s</td><td>%s</td></tr>`, name, mValue)

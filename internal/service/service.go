@@ -27,14 +27,13 @@ func MakeNewMetricsService(s *repository.MemStorage) *MetricsService {
 func (s *MetricsService) GetMetric(name string) string {
 	value := s.Storage.Get(name)
 
-	if value == nil {
+	switch v := value.(type) {
+	case int:
+		return strconv.Itoa(v)
+	case float64:
+		return strconv.FormatFloat(v, 'f', -1, 64)
+	default:
 		return ""
-	}
-
-	if name == "PollCount" {
-		return strconv.Itoa(value.(int))
-	} else {
-		return strconv.FormatFloat(value.(float64), 'f', -1, 64)
 	}
 }
 
