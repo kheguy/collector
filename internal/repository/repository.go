@@ -1,11 +1,14 @@
 package repository
 
 import (
+	"sync"
+
 	models "github.com/kheguy/collector/internal/model"
 )
 
 type MemStorage struct {
 	Data map[string]interface{}
+	mu   sync.Mutex
 }
 
 func MakeNewMemoryStorage() *MemStorage {
@@ -16,11 +19,17 @@ func MakeNewMemoryStorage() *MemStorage {
 
 // Тут будем забирать метрику в будущем (logs?)
 func (s *MemStorage) Get(name string) interface{} {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
 	return s.Data[name]
 }
 
 // Установка метрики
 func (s *MemStorage) Set(name string, mType string, value interface{}) interface{} {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
 	switch mType {
 	case models.Gauge:
 		s.Data[name] = value.(float64)
@@ -38,5 +47,8 @@ func (s *MemStorage) Set(name string, mType string, value interface{}) interface
 }
 
 func (s *MemStorage) GetAll() map[string]interface{} {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
 	return s.Data
 }
