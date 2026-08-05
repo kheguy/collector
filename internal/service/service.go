@@ -15,17 +15,17 @@ var (
 )
 
 type MetricsService struct {
-	Storage *repository.MemStorage
+	storage *repository.MemStorage
 }
 
 func MakeNewMetricsService(s *repository.MemStorage) *MetricsService {
 	return &MetricsService{
-		Storage: s,
+		storage: s,
 	}
 }
 
 func (s *MetricsService) GetMetric(name string) string {
-	value := s.Storage.Get(name)
+	value := s.storage.Get(name)
 
 	switch v := value.(type) {
 	case int:
@@ -38,7 +38,7 @@ func (s *MetricsService) GetMetric(name string) string {
 }
 
 func (s *MetricsService) GetAllMetrics() map[string]interface{} {
-	return s.Storage.GetAll()
+	return s.storage.GetAll()
 }
 
 func (s *MetricsService) UpdateMetrics(name string, typeOfValue string, value interface{}) error {
@@ -67,7 +67,7 @@ func (s *MetricsService) UpdateMetrics(name string, typeOfValue string, value in
 		return uknownTypeError
 	}
 
-	s.Storage.Set(name, typeOfValue, parsedValue)
+	s.storage.Set(name, typeOfValue, parsedValue)
 
 	return nil
 }

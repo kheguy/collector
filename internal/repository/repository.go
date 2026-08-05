@@ -7,13 +7,16 @@ import (
 )
 
 type MemStorage struct {
-	Data map[string]interface{}
+	/*
+		[ISSUE] ПРИВАТНЫЕ ПОЛЯ ПАКЕТА С МАЛЕНЬКОЙ БУКФЫ!
+	*/
+	data map[string]interface{}
 	mu   sync.Mutex
 }
 
 func MakeNewMemoryStorage() *MemStorage {
 	return &MemStorage{
-		Data: make(map[string]interface{}),
+		data: make(map[string]interface{}),
 	}
 }
 
@@ -22,7 +25,7 @@ func (s *MemStorage) Get(name string) interface{} {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	return s.Data[name]
+	return s.data[name]
 }
 
 // Установка метрики
@@ -32,30 +35,40 @@ func (s *MemStorage) Set(name string, mType string, value interface{}) interface
 
 	switch mType {
 	case models.Gauge:
-		s.Data[name] = value.(float64)
+		s.data[name] = value.(float64)
 	case models.Counter:
-		if s.Data[name] == nil {
-			s.Data[name] = 0
+		if s.data[name] == nil {
+			s.data[name] = 0
 		}
-		s.Data[name] = s.Data[name].(int) + value.(int)
+		s.data[name] = s.data[name].(int) + value.(int)
 	}
 
 	// fmt.Printf("New value is set to %s for %s\n", value, name)
 	// fmt.Printf("Store state is %v\n", s.Data)
 
-	return s.Data[name]
+	return s.data[name]
 }
 
 func (s *MemStorage) GetAll() map[string]interface{} {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	return s.Data
+	/*
+		[ISSUE] Вместо возврата ссылки копируем, так как может быть гонка из-аз изменений данных в другой горутине
+		Возможно, стоит посмотреть в сторону RWMutex или снапшотов если данных много???
+	*/
+	result := make(map[string]interface{})
+
+	for key, value := range s.data {
+		result[key] = value
+	}
+
+	return result
 }
 
 func (s *MemStorage) Clear() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	s.Data = make(map[string]interface{})
+	s.data = make(map[string]interface{})
 }

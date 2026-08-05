@@ -9,12 +9,12 @@ import (
 )
 
 type MetricsHandler struct {
-	Service *service.MetricsService
+	service *service.MetricsService
 }
 
 func MakeNewMetricsHandler(s *service.MetricsService) *MetricsHandler {
 	return &MetricsHandler{
-		Service: s,
+		service: s,
 	}
 }
 
@@ -28,7 +28,7 @@ func (h *MetricsHandler) ValueHandler(res http.ResponseWriter, req *http.Request
 		return
 	}
 
-	metricValue := h.Service.GetMetric(name)
+	metricValue := h.service.GetMetric(name)
 
 	if metricValue == "" {
 		http.Error(res, "Not foud", http.StatusNotFound)
@@ -51,7 +51,7 @@ func (h *MetricsHandler) UpdateHandler(res http.ResponseWriter, req *http.Reques
 		return
 	}
 
-	err := h.Service.UpdateMetrics(name, typeOfValue, value)
+	err := h.service.UpdateMetrics(name, typeOfValue, value)
 
 	if err != nil {
 		http.Error(res, "Bad request", http.StatusBadRequest)
@@ -65,7 +65,7 @@ func (h *MetricsHandler) UpdateHandler(res http.ResponseWriter, req *http.Reques
 func (h *MetricsHandler) HTMLListHandler(res http.ResponseWriter, req *http.Request) {
 
 	htmlString := "<table><thead><th>Name</th><th>Value</th></thead><tbody>"
-	for name, value := range h.Service.GetAllMetrics() {
+	for name, value := range h.service.GetAllMetrics() {
 		var mValue string
 
 		switch v := value.(type) {
