@@ -43,9 +43,6 @@ func (s *MemStorage) Set(name string, mType string, value interface{}) interface
 		s.data[name] = s.data[name].(int) + value.(int)
 	}
 
-	// fmt.Printf("New value is set to %s for %s\n", value, name)
-	// fmt.Printf("Store state is %v\n", s.Data)
-
 	return s.data[name]
 }
 

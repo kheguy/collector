@@ -20,8 +20,6 @@ func MakeNewMetricsHandler(s *service.MetricsService) *MetricsHandler {
 
 func (h *MetricsHandler) ValueHandler(res http.ResponseWriter, req *http.Request) {
 	name := req.PathValue("name")
-	// Как будто оно тут и не нужно?
-	// typeOfValue := req.PathValue("type")
 
 	if name == "" {
 		http.Error(res, "Name is required", http.StatusBadRequest)
@@ -40,8 +38,6 @@ func (h *MetricsHandler) ValueHandler(res http.ResponseWriter, req *http.Request
 }
 
 func (h *MetricsHandler) UpdateHandler(res http.ResponseWriter, req *http.Request) {
-	// fmt.Printf("Got request %s\n", req.URL)
-
 	name := req.PathValue("name")
 	typeOfValue := req.PathValue("type")
 	value := req.PathValue("value")
