@@ -2,7 +2,7 @@ package main
 
 import (
 	"flag"
-	"fmt"
+	"log"
 	"net/http"
 	"os"
 
@@ -35,7 +35,7 @@ func main() {
 	r.Get(`/value/{type}/{name}`, metricsHandler.ValueHandler)
 	r.Get(`/`, metricsHandler.HTMLListHandler)
 
-	fmt.Printf("Server started on %s\n", *address)
+	log.Printf("Server started on %s\n", *address)
 	err := http.ListenAndServe(*address, r)
 
 	if err != nil {

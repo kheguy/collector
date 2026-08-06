@@ -3,6 +3,7 @@ package main
 import (
 	"flag"
 	"fmt"
+	"log"
 	"math/rand"
 	"net/http"
 	"os"
@@ -46,7 +47,6 @@ func (a *Agent) Start(pollInterval time.Duration, reportInterval time.Duration) 
 				a.collectMetrics()
 			case <-a.sendTicker.C:
 				for name, value := range a.storage.GetAll() {
-					// Не вижу смысла заводить type в store под единственный счетчик
 					var mType string
 					var mValue string
 					switch v := value.(type) {
@@ -58,12 +58,13 @@ func (a *Agent) Start(pollInterval time.Duration, reportInterval time.Duration) 
 						mValue = strconv.FormatFloat(v, 'f', -1, 64)
 					}
 
-					_, err := a.httpClient.Post(fmt.Sprintf("%s/update/%s/%s/%s", a.url, mType, name, mValue), "plain/text", strings.NewReader(""))
+					res, err := a.httpClient.Post(fmt.Sprintf("%s/update/%s/%s/%s", a.url, mType, name, mValue), "text/plain", strings.NewReader(""))
 
 					if err != nil {
-						fmt.Printf("Request error: \n%s\n", err.Error())
+						log.Printf("Request error: \n%s\n", err.Error())
 						a.Stop()
 					}
+					defer res.Body.Close()
 
 					a.storage.Clear()
 				}
@@ -87,8 +88,7 @@ func (a *Agent) collectMetrics() {
 	a.collectRuntimeMetrics()
 	a.collectCustomMetrics()
 
-	fmt.Printf("Metrics are updated pollCount: %d, time is: %s\n",
-		a.pollCount, time.Now().Format("1:04:05"))
+	log.Printf("Metrics are updated pollCount: %d", a.pollCount)
 }
 
 func (a *Agent) collectRuntimeMetrics() {
