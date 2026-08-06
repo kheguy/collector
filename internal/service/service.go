@@ -5,7 +5,6 @@ import (
 	"strconv"
 
 	models "github.com/kheguy/collector/internal/model"
-	"github.com/kheguy/collector/internal/repository"
 )
 
 var (
@@ -14,11 +13,17 @@ var (
 	uknownTypeError = errors.New("unknown metric type")
 )
 
-type MetricsService struct {
-	storage *repository.MemStorage
+type Storage interface {
+	Get(name string) interface{}
+	GetAll() map[string]interface{}
+	Set(name string, mType string, value interface{}) interface{}
 }
 
-func MakeNewMetricsService(s *repository.MemStorage) *MetricsService {
+type MetricsService struct {
+	storage Storage
+}
+
+func MakeNewMetricsService(s Storage) *MetricsService {
 	return &MetricsService{
 		storage: s,
 	}

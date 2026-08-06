@@ -4,15 +4,19 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
-
-	"github.com/kheguy/collector/internal/service"
 )
 
-type MetricsHandler struct {
-	service *service.MetricsService
+type Service interface {
+	GetMetric(name string) string
+	GetAllMetrics() map[string]interface{}
+	UpdateMetrics(name string, typeOfValue string, value interface{}) error
 }
 
-func MakeNewMetricsHandler(s *service.MetricsService) *MetricsHandler {
+type MetricsHandler struct {
+	service Service
+}
+
+func MakeNewMetricsHandler(s Service) *MetricsHandler {
 	return &MetricsHandler{
 		service: s,
 	}

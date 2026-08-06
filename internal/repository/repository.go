@@ -20,7 +20,6 @@ func MakeNewMemoryStorage() *MemStorage {
 	}
 }
 
-// Тут будем забирать метрику в будущем (logs?)
 func (s *MemStorage) Get(name string) interface{} {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -28,7 +27,6 @@ func (s *MemStorage) Get(name string) interface{} {
 	return s.data[name]
 }
 
-// Установка метрики
 func (s *MemStorage) Set(name string, mType string, value interface{}) interface{} {
 	s.mu.Lock()
 	defer s.mu.Unlock()
