@@ -1,9 +1,10 @@
 package handler
 
 import (
-	"fmt"
 	"net/http"
 	"strconv"
+
+	models "github.com/kheguy/collector/internal/model"
 )
 
 type Service interface {
@@ -12,13 +13,19 @@ type Service interface {
 	UpdateMetrics(name string, typeOfValue string, value interface{}) error
 }
 
-type MetricsHandler struct {
-	service Service
+type Renderer interface {
+	Render(w http.ResponseWriter, name string, data interface{})
 }
 
-func MakeNewMetricsHandler(s Service) *MetricsHandler {
+type MetricsHandler struct {
+	service  Service
+	renderer Renderer
+}
+
+func MakeNewMetricsHandler(s Service, r Renderer) *MetricsHandler {
 	return &MetricsHandler{
-		service: s,
+		service:  s,
+		renderer: r,
 	}
 }
 
@@ -63,11 +70,15 @@ func (h *MetricsHandler) UpdateHandler(res http.ResponseWriter, req *http.Reques
 }
 
 func (h *MetricsHandler) HTMLListHandler(res http.ResponseWriter, req *http.Request) {
+	type PageData struct {
+		Title   string
+		Metrics []models.MetricItem
+	}
 
-	htmlString := "<table><thead><th>Name</th><th>Value</th></thead><tbody>"
+	metrics := make([]models.MetricItem, 0)
+
 	for name, value := range h.service.GetAllMetrics() {
 		var mValue string
-
 		switch v := value.(type) {
 		case int:
 			mValue = strconv.Itoa(v)
@@ -75,12 +86,18 @@ func (h *MetricsHandler) HTMLListHandler(res http.ResponseWriter, req *http.Requ
 			mValue = strconv.FormatFloat(v, 'f', -1, 64)
 		}
 
-		htmlString += fmt.Sprintf(`<tr><td>%s</td><td>%s</td></tr>`, name, mValue)
+		metrics = append(metrics, models.MetricItem{
+			Name:  name,
+			Value: mValue,
+		})
 	}
 
-	htmlString += `</tbody></table>`
-	res.WriteHeader(http.StatusOK)
-	res.Write([]byte(htmlString))
+	data := PageData{
+		Title:   "List",
+		Metrics: metrics,
+	}
+
+	h.renderer.Render(res, "list", data)
 }
 
 func (h *MetricsHandler) NotFoundHandler(res http.ResponseWriter, req *http.Request) {

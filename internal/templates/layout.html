@@ -1,0 +1,17 @@
+{{define "layout"}}
+<!DOCTYPE html>
+<html>
+<head>
+    <title>{{.Title}}</title>
+</head>
+<body>
+    <main>
+        {{template "content" .}}
+    </main>
+    
+    <footer>
+        <p>Metrics collector INC</p>
+    </footer>
+</body>
+</html>
+{{end}}

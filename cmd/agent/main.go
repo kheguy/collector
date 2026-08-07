@@ -7,9 +7,11 @@ import (
 	"math/rand"
 	"net/http"
 	"os"
+	"os/signal"
 	"runtime"
 	"strconv"
 	"strings"
+	"syscall"
 	"time"
 
 	models "github.com/kheguy/collector/internal/model"
@@ -65,9 +67,8 @@ func (a *Agent) Start(pollInterval time.Duration, reportInterval time.Duration) 
 						a.Stop()
 					}
 					defer res.Body.Close()
-
-					a.storage.Clear()
 				}
+				a.storage.Clear()
 
 			case <-a.stopChan:
 				a.getTicker.Stop()
@@ -131,10 +132,6 @@ func (a *Agent) collectRuntimeMetrics() {
 }
 
 func (a *Agent) collectCustomMetrics() {
-	pollCount := a.storage.Get("PollCount")
-	if pollCount == nil {
-		pollCount = 0
-	}
 	a.storage.Set("PollCount", models.Counter, 1)
 
 	randomValue := rand.Float64() * 100
@@ -162,5 +159,11 @@ func main() {
 
 	agent.Start(time.Duration(*pollInterval)*time.Second, time.Duration(*reportInterval)*time.Second)
 
-	time.Sleep(100000000 * time.Second)
+	// Мне показалось, что с сигналом будет правильнее, посмотрел в доке
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
+
+	<-sigChan
+
+	agent.Stop()
 }

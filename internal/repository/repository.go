@@ -7,9 +7,6 @@ import (
 )
 
 type MemStorage struct {
-	/*
-		[ISSUE] ПРИВАТНЫЕ ПОЛЯ ПАКЕТА С МАЛЕНЬКОЙ БУКФЫ!
-	*/
 	data map[string]interface{}
 	mu   sync.Mutex
 }
@@ -48,10 +45,6 @@ func (s *MemStorage) GetAll() map[string]interface{} {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	/*
-		[ISSUE] Вместо возврата ссылки копируем, так как может быть гонка из-аз изменений данных в другой горутине
-		Возможно, стоит посмотреть в сторону RWMutex или снапшотов если данных много???
-	*/
 	result := make(map[string]interface{})
 
 	for key, value := range s.data {

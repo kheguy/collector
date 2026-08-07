@@ -11,6 +11,7 @@ import (
 	"github.com/kheguy/collector/internal/handler"
 	"github.com/kheguy/collector/internal/repository"
 	"github.com/kheguy/collector/internal/service"
+	"github.com/kheguy/collector/internal/templates"
 )
 
 func main() {
@@ -23,22 +24,27 @@ func main() {
 		panic("Unknown flags")
 	}
 
+	renderer, tempErr := templates.MakeNewTemplateRenderer()
+	if tempErr != nil {
+		log.Fatal("Template loading error: ", tempErr)
+	}
+
 	r := chi.NewRouter()
 
 	storage := repository.MakeNewMemoryStorage()
 
 	metricsService := service.MakeNewMetricsService(storage)
 
-	metricsHandler := handler.MakeNewMetricsHandler(metricsService)
+	metricsHandler := handler.MakeNewMetricsHandler(metricsService, renderer)
 
 	r.Post(`/update/{type}/{name}/{value}`, metricsHandler.UpdateHandler)
 	r.Get(`/value/{type}/{name}`, metricsHandler.ValueHandler)
 	r.Get(`/`, metricsHandler.HTMLListHandler)
 
 	log.Printf("Server started on %s\n", *address)
-	err := http.ListenAndServe(*address, r)
+	httpErr := http.ListenAndServe(*address, r)
 
-	if err != nil {
-		panic(err)
+	if httpErr != nil {
+		log.Fatal(httpErr)
 	}
 }
