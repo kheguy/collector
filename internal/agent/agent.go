@@ -61,6 +61,7 @@ func (a *Agent) Start(pollInterval time.Duration, reportInterval time.Duration) 
 					if err != nil {
 						log.Printf("Request error: \n%s\n", err.Error())
 						a.Stop()
+						return
 					}
 					defer res.Body.Close()
 				}
