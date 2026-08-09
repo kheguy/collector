@@ -30,7 +30,7 @@ func MakeNewTemplateRenderer() (*TemplateRenderer, error) {
 func (r *TemplateRenderer) Render(w http.ResponseWriter, name string, data interface{}) {
 	tmpl, ok := r.templates[name]
 	if !ok {
-		http.Error(w, "Template not found", http.StatusInternalServerError)
+		http.Error(w, "Template not found", http.StatusNotFound)
 		return
 	}
 

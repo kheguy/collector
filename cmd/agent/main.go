@@ -153,7 +153,11 @@ func main() {
 
 	storage := repository.MakeNewMemoryStorage()
 
-	addressWithProtocol := "http://" + *address
+	addressWithProtocol := *address
+
+	if !strings.Contains(addressWithProtocol, "http://") && !strings.Contains(addressWithProtocol, "https://") {
+		addressWithProtocol = "http://" + addressWithProtocol
+	}
 
 	agent := NewAgent(storage, addressWithProtocol, *http.DefaultClient)
 

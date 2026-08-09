@@ -40,7 +40,7 @@ func (h *MetricsHandler) ValueHandler(res http.ResponseWriter, req *http.Request
 	metricValue := h.service.GetMetric(name)
 
 	if metricValue == "" {
-		http.Error(res, "Not foud", http.StatusNotFound)
+		http.Error(res, http.StatusText(404), http.StatusNotFound)
 		return
 	}
 
@@ -61,7 +61,7 @@ func (h *MetricsHandler) UpdateHandler(res http.ResponseWriter, req *http.Reques
 	err := h.service.UpdateMetrics(name, typeOfValue, value)
 
 	if err != nil {
-		http.Error(res, "Bad request", http.StatusBadRequest)
+		http.Error(res, http.StatusText(400), http.StatusBadRequest)
 		return
 	}
 
