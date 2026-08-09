@@ -16,9 +16,9 @@ func Load() (Config, error) {
 	var appFlags = flag.NewFlagSet("app", flag.ExitOnError)
 
 	var (
-		address        = *appFlags.String("a", "localhost:8080", "Address of the server")
-		reportInterval = *appFlags.Int("r", 10, "Report interval")
-		pollInterval   = *appFlags.Int("p", 2, "Poll interval")
+		address        = appFlags.String("a", "localhost:8080", "Address of the server")
+		reportInterval = appFlags.Int("r", 10, "Report interval")
+		pollInterval   = appFlags.Int("p", 2, "Poll interval")
 	)
 
 	if err := appFlags.Parse(os.Args[1:]); err != nil {
@@ -26,8 +26,8 @@ func Load() (Config, error) {
 	}
 
 	return Config{
-		address,
-		reportInterval,
-		pollInterval,
+		*address,
+		*reportInterval,
+		*pollInterval,
 	}, nil
 }
