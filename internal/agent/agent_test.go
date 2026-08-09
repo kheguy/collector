@@ -169,8 +169,8 @@ func TestAgent_StartStop(t *testing.T) {
 
 	agent := NewAgent(storage, server.URL, http.Client{})
 
-	agent.Start(100*time.Millisecond, 200*time.Millisecond)
-	time.Sleep(500 * time.Millisecond)
+	agent.Start(2*time.Millisecond, 10*time.Millisecond)
+	time.Sleep(5 * time.Millisecond)
 	agent.Stop()
 
 	assert.NotNil(t, agent.getTicker)
@@ -197,8 +197,8 @@ func TestAgent_Start_CollectsMetrics(t *testing.T) {
 
 	initialPollCount := agent.pollCount
 
-	agent.Start(50*time.Millisecond, 200*time.Millisecond)
-	time.Sleep(200 * time.Millisecond)
+	agent.Start(2*time.Millisecond, 10*time.Millisecond)
+	time.Sleep(5 * time.Millisecond)
 	agent.Stop()
 
 	assert.Greater(t, agent.pollCount, initialPollCount)
