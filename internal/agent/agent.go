@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"math/rand/v2"
@@ -16,10 +17,6 @@ import (
 
 type Agent struct {
 	storage    *repository.MemStorage
-	pollCount  int64
-	getTicker  *time.Ticker
-	sendTicker *time.Ticker
-	stopChan   chan bool
 	url        string
 	httpClient http.Client
 }
@@ -27,66 +24,75 @@ type Agent struct {
 func NewAgent(storage *repository.MemStorage, url string, httpClient http.Client) *Agent {
 	return &Agent{
 		storage:    storage,
-		pollCount:  0,
-		stopChan:   make(chan bool),
 		url:        url,
 		httpClient: httpClient,
 	}
 }
 
-func (a *Agent) Start(pollInterval time.Duration, reportInterval time.Duration) {
-	a.getTicker = time.NewTicker(pollInterval)
-	a.sendTicker = time.NewTicker(reportInterval)
+func (a *Agent) Run(ctx context.Context, pollInterval time.Duration, reportInterval time.Duration) {
+	getTicker := time.NewTicker(pollInterval)
+	sendTicker := time.NewTicker(reportInterval)
+	defer getTicker.Stop()
+	defer sendTicker.Stop()
 
-	go func() {
-		for {
-			select {
-			case <-a.getTicker.C:
-				a.collectMetrics()
-			case <-a.sendTicker.C:
-				for name, value := range a.storage.GetAll() {
-					var mType string
-					var mValue string
-					switch v := value.(type) {
-					case int:
-						mType = models.Counter
-						mValue = strconv.Itoa(v)
-					case float64:
-						mType = models.Gauge
-						mValue = strconv.FormatFloat(v, 'f', -1, 64)
-					}
-
-					res, err := a.httpClient.Post(fmt.Sprintf("%s/update/%s/%s/%s", a.url, mType, name, mValue), "text/plain", strings.NewReader(""))
-
-					if err != nil {
-						log.Printf("Request error: \n%s\n", err.Error())
-						a.Stop()
-						return
-					}
-					defer res.Body.Close()
-				}
-				a.storage.Clear()
-
-			case <-a.stopChan:
-				a.getTicker.Stop()
-				a.sendTicker.Stop()
-				return
+	for {
+		select {
+		case <-getTicker.C:
+			a.collectMetrics()
+		case <-sendTicker.C:
+			if err := a.sendMetrics(ctx); err != nil {
+				log.Printf("Request error: %v", err)
 			}
+		case <-ctx.Done():
+			return
 		}
-	}()
+	}
 }
 
-func (a *Agent) Stop() {
-	close(a.stopChan)
+func (a *Agent) sendMetrics(ctx context.Context) error {
+	for name, value := range a.storage.GetAll() {
+		var mType string
+		var mValue string
+
+		switch v := value.(type) {
+		case int:
+			mType = models.Counter
+			mValue = strconv.Itoa(v)
+		case float64:
+			mType = models.Gauge
+			mValue = strconv.FormatFloat(v, 'f', -1, 64)
+		default:
+			continue
+		}
+
+		// Вроде вот так через конитекст еще и запросы можно зацепить
+		req, err := http.NewRequestWithContext(
+			ctx,
+			http.MethodPost,
+			fmt.Sprintf("%s/update/%s/%s/%s", a.url, mType, name, mValue),
+			strings.NewReader(""),
+		)
+		if err != nil {
+			return err
+		}
+		req.Header.Set("Content-Type", "text/plain")
+
+		res, err := a.httpClient.Do(req)
+		if err != nil {
+			return err
+		}
+		res.Body.Close()
+	}
+
+	a.storage.Clear()
+	return nil
 }
 
 func (a *Agent) collectMetrics() {
-	a.pollCount++
-
 	a.collectRuntimeMetrics()
 	a.collectCustomMetrics()
 
-	log.Printf("Metrics are updated pollCount: %d", a.pollCount)
+	log.Printf("Metrics are updated pollCount: %v", a.storage.Get("PollCount"))
 }
 
 func (a *Agent) collectRuntimeMetrics() {

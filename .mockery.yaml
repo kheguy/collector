@@ -1,0 +1,15 @@
+with-expecter: true
+issue-845-fix: true
+dir: internal/mocks
+outpkg: mocks
+filename: "mock_{{.InterfaceName | snakecase}}.go"
+resolve-type-alias: false
+disable-version-string: true
+packages:
+  github.com/kheguy/collector/internal/handler:
+    interfaces:
+      Service:
+      Renderer:
+  github.com/kheguy/collector/internal/service:
+    interfaces:
+      Storage:

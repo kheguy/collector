@@ -5,54 +5,16 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/kheguy/collector/internal/mocks"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 )
 
-type MockService struct {
-	GetMetricFunc     func(name string) string
-	GetAllMetricsFunc func() map[string]interface{}
-	UpdateMetricsFunc func(name string, typeOfValue string, value interface{}) error
-}
-
-func (m *MockService) GetMetric(name string) string {
-	if m.GetMetricFunc != nil {
-		return m.GetMetricFunc(name)
-	}
-	return ""
-}
-
-func (m *MockService) GetAllMetrics() map[string]interface{} {
-	if m.GetAllMetricsFunc != nil {
-		return m.GetAllMetricsFunc()
-	}
-	return nil
-}
-
-func (m *MockService) UpdateMetrics(name string, typeOfValue string, value interface{}) error {
-	if m.UpdateMetricsFunc != nil {
-		return m.UpdateMetricsFunc(name, typeOfValue, value)
-	}
-	return nil
-}
-
-type MockRenderer struct {
-	RenderFunc func(w http.ResponseWriter, name string, data interface{})
-}
-
-func (m *MockRenderer) Render(w http.ResponseWriter, name string, data interface{}) {
-	if m.RenderFunc != nil {
-		m.RenderFunc(w, name, data)
-	}
-}
-
 func TestValueHandler_Success(t *testing.T) {
-	mock := &MockService{
-		GetMetricFunc: func(name string) string {
-			return "Brrrrrrbzzzzzzz"
-		},
-	}
-	handler := MakeNewMetricsHandler(mock, &MockRenderer{})
+	serviceMock := mocks.NewMockService(t)
+	serviceMock.EXPECT().GetMetric("test").Return("Brrrrrrbzzzzzzz").Once()
+	handler := MakeNewMetricsHandler(serviceMock, mocks.NewMockRenderer(t))
 
 	req := httptest.NewRequest("GET", "/value/gauge/test", nil)
 	req.SetPathValue("name", "test")
@@ -65,12 +27,9 @@ func TestValueHandler_Success(t *testing.T) {
 }
 
 func TestValueHandler_NotFound(t *testing.T) {
-	mock := &MockService{
-		GetMetricFunc: func(name string) string {
-			return ""
-		},
-	}
-	handler := MakeNewMetricsHandler(mock, &MockRenderer{})
+	serviceMock := mocks.NewMockService(t)
+	serviceMock.EXPECT().GetMetric("TYKTOBRAT").Return("").Once()
+	handler := MakeNewMetricsHandler(serviceMock, mocks.NewMockRenderer(t))
 
 	req := httptest.NewRequest("GET", "/value/gauge/TYKTOBRAT", nil)
 	req.SetPathValue("name", "TYKTOBRAT")
@@ -82,12 +41,9 @@ func TestValueHandler_NotFound(t *testing.T) {
 }
 
 func TestUpdateHandler_Success(t *testing.T) {
-	mock := &MockService{
-		UpdateMetricsFunc: func(name string, typeOfValue string, value interface{}) error {
-			return nil
-		},
-	}
-	handler := MakeNewMetricsHandler(mock, &MockRenderer{})
+	serviceMock := mocks.NewMockService(t)
+	serviceMock.EXPECT().UpdateMetrics("test", "gauge", "404").Return(nil).Once()
+	handler := MakeNewMetricsHandler(serviceMock, mocks.NewMockRenderer(t))
 
 	req := httptest.NewRequest("POST", "/update/gauge/test/404", nil)
 	req.SetPathValue("type", "gauge")
@@ -102,12 +58,9 @@ func TestUpdateHandler_Success(t *testing.T) {
 }
 
 func TestUpdateHandler_ServiceError(t *testing.T) {
-	mock := &MockService{
-		UpdateMetricsFunc: func(name string, typeOfValue string, value interface{}) error {
-			return assert.AnError
-		},
-	}
-	handler := MakeNewMetricsHandler(mock, &MockRenderer{})
+	serviceMock := mocks.NewMockService(t)
+	serviceMock.EXPECT().UpdateMetrics("test", "gauge", "404").Return(assert.AnError).Once()
+	handler := MakeNewMetricsHandler(serviceMock, mocks.NewMockRenderer(t))
 
 	req := httptest.NewRequest("POST", "/update/gauge/test/404", nil)
 	req.SetPathValue("type", "gauge")
@@ -121,24 +74,22 @@ func TestUpdateHandler_ServiceError(t *testing.T) {
 }
 
 func TestHTMLListHandler(t *testing.T) {
-	mock := &MockService{
-		GetAllMetricsFunc: func() map[string]interface{} {
-			return map[string]interface{}{
-				"temp":  1.2,
-				"count": 3,
-			}
-		},
-	}
+	serviceMock := mocks.NewMockService(t)
+	serviceMock.EXPECT().GetAllMetrics().Return(map[string]interface{}{
+		"temp":  1.2,
+		"count": 3,
+	}).Once()
 
 	var capturedData interface{}
-	renderer := &MockRenderer{
-		RenderFunc: func(w http.ResponseWriter, name string, data interface{}) {
+	rendererMock := mocks.NewMockRenderer(t)
+	rendererMock.EXPECT().Render(mock.Anything, "list", mock.Anything).Run(
+		func(w http.ResponseWriter, name string, data interface{}) {
 			capturedData = data
 			w.WriteHeader(http.StatusOK)
 		},
-	}
+	).Once()
 
-	handler := MakeNewMetricsHandler(mock, renderer)
+	handler := MakeNewMetricsHandler(serviceMock, rendererMock)
 
 	req := httptest.NewRequest("GET", "/", nil)
 	w := httptest.NewRecorder()
@@ -150,7 +101,7 @@ func TestHTMLListHandler(t *testing.T) {
 }
 
 func TestNotFoundHandler(t *testing.T) {
-	handler := MakeNewMetricsHandler(&MockService{}, &MockRenderer{})
+	handler := MakeNewMetricsHandler(mocks.NewMockService(t), mocks.NewMockRenderer(t))
 
 	req := httptest.NewRequest("GET", "/any", nil)
 	w := httptest.NewRecorder()

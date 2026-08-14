@@ -1,9 +1,9 @@
 package main
 
 import (
+	"context"
 	"log"
 	"net/http"
-	"os"
 	"os/signal"
 	"strings"
 	"syscall"
@@ -30,15 +30,10 @@ func main() {
 		addressWithProtocol = "http://" + addressWithProtocol
 	}
 
-	agent := agent.NewAgent(storage, addressWithProtocol, *http.DefaultClient)
+	metricsAgent := agent.NewAgent(storage, addressWithProtocol, *http.DefaultClient)
 
-	agent.Start(time.Duration(cfg.PollInterval)*time.Second, time.Duration(cfg.ReportInterval)*time.Second)
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer stop()
 
-	// Мне показалось, что с сигналом будет правильнее, посмотрел в доке
-	sigChan := make(chan os.Signal, 1)
-	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
-
-	<-sigChan
-
-	agent.Stop()
+	metricsAgent.Run(ctx, time.Duration(cfg.PollInterval)*time.Second, time.Duration(cfg.ReportInterval)*time.Second)
 }

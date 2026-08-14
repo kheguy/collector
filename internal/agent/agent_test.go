@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -24,8 +25,6 @@ func TestNewAgent(t *testing.T) {
 	agent := NewAgent(storage, server.URL, http.Client{})
 
 	assert.NotNil(t, agent)
-	assert.Equal(t, int64(0), agent.pollCount)
-	assert.NotNil(t, agent.stopChan)
 	assert.NotNil(t, agent.url)
 }
 
@@ -137,11 +136,7 @@ func TestAgent_CollectMetrics(t *testing.T) {
 
 	agent := NewAgent(storage, server.URL, http.Client{})
 
-	initialPollCount := agent.pollCount
-
 	agent.collectMetrics()
-
-	assert.Equal(t, initialPollCount+1, agent.pollCount)
 
 	metrics := storage.GetAll()
 	assert.NotEmpty(t, metrics)
@@ -158,7 +153,7 @@ func TestAgent_CollectMetrics(t *testing.T) {
 	assert.Contains(t, metrics, "HeapAlloc")
 }
 
-func TestAgent_StartStop(t *testing.T) {
+func TestAgent_RunStopsAfterContextCancellation(t *testing.T) {
 	storage := repository.MakeNewMemoryStorage()
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -169,22 +164,23 @@ func TestAgent_StartStop(t *testing.T) {
 
 	agent := NewAgent(storage, server.URL, http.Client{})
 
-	agent.Start(2*time.Millisecond, 10*time.Millisecond)
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() {
+		agent.Run(ctx, 2*time.Millisecond, 10*time.Millisecond)
+		close(done)
+	}()
 	time.Sleep(5 * time.Millisecond)
-	agent.Stop()
-
-	assert.NotNil(t, agent.getTicker)
-	assert.NotNil(t, agent.sendTicker)
+	cancel()
 
 	select {
-	case _, ok := <-agent.stopChan:
-		assert.False(t, ok, "stopChan should be closed")
-	default:
-		t.Error("stopChan should be closed")
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("Run should stop after context cancellation")
 	}
 }
 
-func TestAgent_Start_CollectsMetrics(t *testing.T) {
+func TestAgent_RunCollectsMetrics(t *testing.T) {
 	storage := repository.MakeNewMemoryStorage()
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -195,17 +191,20 @@ func TestAgent_Start_CollectsMetrics(t *testing.T) {
 
 	agent := NewAgent(storage, server.URL, http.Client{})
 
-	initialPollCount := agent.pollCount
-
-	agent.Start(2*time.Millisecond, 10*time.Millisecond)
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() {
+		agent.Run(ctx, 2*time.Millisecond, 10*time.Millisecond)
+		close(done)
+	}()
 	time.Sleep(5 * time.Millisecond)
-	agent.Stop()
-
-	assert.Greater(t, agent.pollCount, initialPollCount)
+	cancel()
+	<-done
 
 	metrics := storage.GetAll()
 	assert.NotEmpty(t, metrics)
 	assert.Contains(t, metrics, "PollCount")
+	assert.Greater(t, metrics["PollCount"].(int), 0)
 	assert.Contains(t, metrics, "RandomValue")
 	assert.Contains(t, metrics, "Alloc")
 }
