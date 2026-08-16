@@ -2,7 +2,7 @@ with-expecter: true
 issue-845-fix: true
 dir: internal/mocks
 outpkg: mocks
-filename: "mock_{{.InterfaceName | snakecase}}.go"
+filename: "mock_{{.InterfaceName | snakecase}}.gen.go"
 resolve-type-alias: false
 disable-version-string: true
 packages:
