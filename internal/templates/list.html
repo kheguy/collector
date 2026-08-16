@@ -1,0 +1,24 @@
+{{define "content"}}
+    <table>
+        <thead>
+            <th>
+                <span>Name</span>
+            </th>
+            <th>
+                <span>Value</span>
+            </th>
+        </thead>
+        <tbody>
+            {{range .Metrics}}
+            <tr>
+                <td>
+                    <span>{{.Name}}</span>
+                </td>
+                <td>
+                    <span>{{.Value}}</span>
+                </td>
+            </tr>
+            {{end}}
+        </tbody>
+    </table>
+{{end}}

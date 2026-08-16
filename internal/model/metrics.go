@@ -5,6 +5,11 @@ const (
 	Gauge   = "gauge"
 )
 
+type MetricItem struct {
+	Name  string
+	Value string
+}
+
 // NOTE: Не усложняем пример, вводя иерархическую вложенность структур.
 // Органичиваясь плоской моделью.
 // Delta и Value объявлены через указатели,
