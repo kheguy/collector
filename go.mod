@@ -3,6 +3,7 @@ module github.com/kheguy/collector
 go 1.26.0
 
 require (
+	github.com/caarlos0/env/v6 v6.10.1
 	github.com/go-chi/chi/v5 v5.3.1
 	github.com/stretchr/testify v1.11.1
 )
