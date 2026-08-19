@@ -8,6 +8,7 @@ import (
 
 	"github.com/kheguy/collector/internal/config"
 	"github.com/kheguy/collector/internal/handler"
+	"github.com/kheguy/collector/internal/middlewares"
 	"github.com/kheguy/collector/internal/repository"
 	"github.com/kheguy/collector/internal/service"
 	"github.com/kheguy/collector/internal/templates"
@@ -26,6 +27,7 @@ func main() {
 	}
 
 	r := chi.NewRouter()
+	r.Use(middlewares.WithLogging)
 
 	storage := repository.MakeNewMemoryStorage()
 
