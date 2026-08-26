@@ -37,8 +37,10 @@ func main() {
 
 	r.Post(`/update/{type}/{name}/{value}`, metricsHandler.UpdateHandler)
 	r.Post(`/update`, metricsHandler.JSONUpdateHandler)
+	r.Post(`/update/`, metricsHandler.JSONUpdateHandler)
 	r.Get(`/value/{type}/{name}`, metricsHandler.ValueHandler)
 	r.Post(`/value`, metricsHandler.JSONValueHandler)
+	r.Post(`/value/`, metricsHandler.JSONValueHandler)
 	r.Get(`/`, metricsHandler.HTMLListHandler)
 
 	log.Printf("Server started on %s\n", cfg.Address)

@@ -74,7 +74,7 @@ func (a *Agent) sendMetrics(ctx context.Context) error {
 		req, err := http.NewRequestWithContext(
 			ctx,
 			http.MethodPost,
-			fmt.Sprintf("%s/update", a.url),
+			fmt.Sprintf("%s/update/", a.url),
 			bytes.NewReader(body),
 		)
 		if err != nil {
