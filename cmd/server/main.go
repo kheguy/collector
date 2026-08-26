@@ -28,6 +28,7 @@ func main() {
 
 	r := chi.NewRouter()
 	r.Use(middlewares.WithLogging)
+	r.Use(middlewares.WithGzip)
 
 	storage := repository.MakeNewMemoryStorage()
 

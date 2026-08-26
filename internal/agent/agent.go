@@ -2,6 +2,7 @@ package agent
 
 import (
 	"bytes"
+	"compress/gzip"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -70,32 +71,35 @@ func (a *Agent) sendMetrics(ctx context.Context) error {
 		if err != nil {
 			return err
 		}
+		compressedBody, err := compress(body)
+		if err != nil {
+			return err
+		}
 
 		req, err := http.NewRequestWithContext(
 			ctx,
 			http.MethodPost,
 			fmt.Sprintf("%s/update/", a.url),
-			bytes.NewReader(body),
+			bytes.NewReader(compressedBody),
 		)
 		if err != nil {
 			return err
 		}
 		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Content-Encoding", "gzip")
 		req.Header.Set("Accept", "application/json")
+		req.Header.Set("Accept-Encoding", "gzip")
 
 		res, err := a.httpClient.Do(req)
 		if err != nil {
 			return err
 		}
 
-		_, readErr := io.Copy(io.Discard, res.Body)
-		closeErr := res.Body.Close()
-		if readErr != nil {
-			return readErr
+		if _, err := io.Copy(io.Discard, res.Body); err != nil {
+			res.Body.Close()
+			return err
 		}
-		if closeErr != nil {
-			return closeErr
-		}
+		res.Body.Close()
 		if res.StatusCode < http.StatusOK || res.StatusCode >= http.StatusMultipleChoices {
 			return fmt.Errorf("server returned status %s", res.Status)
 		}
@@ -103,6 +107,18 @@ func (a *Agent) sendMetrics(ctx context.Context) error {
 
 	a.storage.Clear()
 	return nil
+}
+
+func compress(data []byte) ([]byte, error) {
+	var buffer bytes.Buffer
+	writer := gzip.NewWriter(&buffer)
+	if _, err := writer.Write(data); err != nil {
+		return nil, err
+	}
+	if err := writer.Close(); err != nil {
+		return nil, err
+	}
+	return buffer.Bytes(), nil
 }
 
 func (a *Agent) collectMetrics() {
