@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"encoding/json"
 	"net/http"
 	"strconv"
 
@@ -67,6 +68,93 @@ func (h *MetricsHandler) UpdateHandler(res http.ResponseWriter, req *http.Reques
 
 	res.WriteHeader(http.StatusOK)
 	res.Write([]byte(`OK`))
+}
+
+func (h *MetricsHandler) JSONUpdateHandler(res http.ResponseWriter, req *http.Request) {
+	var metric models.Metrics
+	if err := json.NewDecoder(req.Body).Decode(&metric); err != nil {
+		http.Error(res, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
+		return
+	}
+
+	var value string
+	switch metric.MType {
+	case models.Gauge:
+		if metric.Value == nil {
+			http.Error(res, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
+			return
+		}
+		value = strconv.FormatFloat(*metric.Value, 'f', -1, 64)
+	case models.Counter:
+		if metric.Delta == nil {
+			http.Error(res, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
+			return
+		}
+		value = strconv.FormatInt(*metric.Delta, 10)
+	default:
+		http.Error(res, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
+		return
+	}
+
+	if metric.ID == "" {
+		http.Error(res, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
+		return
+	}
+	if err := h.service.UpdateMetrics(metric.ID, metric.MType, value); err != nil {
+		http.Error(res, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
+		return
+	}
+
+	stored, ok := h.service.GetAllMetrics()[metric.ID]
+	if !ok {
+		http.Error(res, http.StatusText(http.StatusNotFound), http.StatusNotFound)
+		return
+	}
+	metric = makeMetric(metric.ID, metric.MType, stored)
+	writeJSON(res, http.StatusOK, metric)
+}
+
+func (h *MetricsHandler) JSONValueHandler(res http.ResponseWriter, req *http.Request) {
+	var metric models.Metrics
+	if err := json.NewDecoder(req.Body).Decode(&metric); err != nil {
+		http.Error(res, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
+		return
+	}
+	if metric.ID == "" || (metric.MType != models.Gauge && metric.MType != models.Counter) {
+		http.Error(res, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
+		return
+	}
+
+	stored, ok := h.service.GetAllMetrics()[metric.ID]
+	if !ok {
+		http.Error(res, http.StatusText(http.StatusNotFound), http.StatusNotFound)
+		return
+	}
+
+	result := makeMetric(metric.ID, metric.MType, stored)
+	if result.Value == nil && result.Delta == nil {
+		http.Error(res, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
+		return
+	}
+	writeJSON(res, http.StatusOK, result)
+}
+
+func makeMetric(id string, mType string, value interface{}) models.Metrics {
+	metric := models.Metrics{ID: id, MType: mType}
+	switch v := value.(type) {
+	case float64:
+		metric.Value = &v
+	case int:
+		delta := int64(v)
+		metric.Delta = &delta
+	}
+	return metric
+}
+
+func writeJSON(res http.ResponseWriter, status int, value interface{}) {
+	res.Header().Set("Content-Type", "application/json")
+	res.WriteHeader(status)
+	_ = json.NewEncoder(res).Encode(value)
 }
 
 func (h *MetricsHandler) HTMLListHandler(res http.ResponseWriter, req *http.Request) {
