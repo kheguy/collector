@@ -3,6 +3,7 @@ package main
 import (
 	"log"
 	"net/http"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 
@@ -15,7 +16,7 @@ import (
 )
 
 func main() {
-	cfg, cfgErr := config.Load()
+	cfg, cfgErr := config.LoadServer()
 
 	if cfgErr != nil {
 		log.Fatal("Config loading error: ", cfgErr)
@@ -32,7 +33,32 @@ func main() {
 
 	storage := repository.MakeNewMemoryStorage()
 
-	metricsService := service.MakeNewMetricsService(storage)
+	if cfg.Restore {
+		if err := storage.Restore(cfg.FileStoragePath); err != nil {
+			log.Fatal("Metrics restore error: ", err)
+		}
+	}
+
+	if cfg.StoreInterval > 0 {
+		go func() {
+			ticker := time.NewTicker(time.Duration(cfg.StoreInterval) * time.Second)
+			defer ticker.Stop()
+			for range ticker.C {
+				if err := storage.Save(cfg.FileStoragePath); err != nil {
+					log.Printf("Metrics save error: %v", err)
+				}
+			}
+		}()
+	}
+
+	// Я не уверен что это окей
+	var saveMetrics func() error
+	if cfg.StoreInterval == 0 {
+		saveMetrics = func() error {
+			return storage.Save(cfg.FileStoragePath)
+		}
+	}
+	metricsService := service.MakeNewMetricsService(storage, saveMetrics)
 
 	metricsHandler := handler.MakeNewMetricsHandler(metricsService, renderer)
 

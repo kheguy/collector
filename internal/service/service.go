@@ -21,11 +21,13 @@ type Storage interface {
 
 type MetricsService struct {
 	storage Storage
+	save    func() error
 }
 
-func MakeNewMetricsService(s Storage) *MetricsService {
+func MakeNewMetricsService(s Storage, save func() error) *MetricsService {
 	return &MetricsService{
 		storage: s,
+		save:    save,
 	}
 }
 
@@ -73,6 +75,9 @@ func (s *MetricsService) UpdateMetrics(name string, typeOfValue string, value in
 	}
 
 	s.storage.Set(name, typeOfValue, parsedValue)
+	if s.save != nil {
+		return s.save()
+	}
 
 	return nil
 }
