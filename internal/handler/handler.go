@@ -10,6 +10,7 @@ import (
 
 type Service interface {
 	GetMetric(name string) string
+	GetRawMetric(name string) interface{}
 	GetAllMetrics() map[string]interface{}
 	UpdateMetrics(name string, typeOfValue string, value interface{}) error
 }
@@ -105,8 +106,8 @@ func (h *MetricsHandler) JSONUpdateHandler(res http.ResponseWriter, req *http.Re
 		return
 	}
 
-	stored, ok := h.service.GetAllMetrics()[metric.ID]
-	if !ok {
+	stored := h.service.GetRawMetric(metric.ID)
+	if stored == nil {
 		http.Error(res, http.StatusText(http.StatusNotFound), http.StatusNotFound)
 		return
 	}
@@ -125,8 +126,8 @@ func (h *MetricsHandler) JSONValueHandler(res http.ResponseWriter, req *http.Req
 		return
 	}
 
-	stored, ok := h.service.GetAllMetrics()[metric.ID]
-	if !ok {
+	stored := h.service.GetRawMetric(metric.ID)
+	if stored == nil {
 		http.Error(res, http.StatusText(http.StatusNotFound), http.StatusNotFound)
 		return
 	}

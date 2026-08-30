@@ -1,8 +1,13 @@
 package main
 
 import (
+	"context"
+	"errors"
 	"log"
 	"net/http"
+	"os/signal"
+	"sync"
+	"syscall"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -39,26 +44,32 @@ func main() {
 		}
 	}
 
+	saveCtx, cancelSave := context.WithCancel(context.Background())
+	var saveWG sync.WaitGroup
+
 	if cfg.StoreInterval > 0 {
+		saveWG.Add(1)
 		go func() {
+			defer saveWG.Done()
 			ticker := time.NewTicker(time.Duration(cfg.StoreInterval) * time.Second)
 			defer ticker.Stop()
-			for range ticker.C {
-				if err := storage.Save(cfg.FileStoragePath); err != nil {
-					log.Printf("Metrics save error: %v", err)
+			for {
+				select {
+				case <-ticker.C:
+					if err := storage.Save(cfg.FileStoragePath); err != nil {
+						log.Printf("Metrics save error: %v", err)
+					}
+				case <-saveCtx.Done():
+					if err := storage.Save(cfg.FileStoragePath); err != nil {
+						log.Printf("Final metrics save error: %v", err)
+					}
+					return
 				}
 			}
 		}()
 	}
 
-	// Я не уверен что это окей
-	var saveMetrics func() error
-	if cfg.StoreInterval == 0 {
-		saveMetrics = func() error {
-			return storage.Save(cfg.FileStoragePath)
-		}
-	}
-	metricsService := service.MakeNewMetricsService(storage, saveMetrics)
+	metricsService := service.MakeNewMetricsService(storage, cfg.FileStoragePath, cfg.StoreInterval)
 
 	metricsHandler := handler.MakeNewMetricsHandler(metricsService, renderer)
 
@@ -70,10 +81,36 @@ func main() {
 	r.Post(`/value/`, metricsHandler.JSONValueHandler)
 	r.Get(`/`, metricsHandler.HTMLListHandler)
 
-	log.Printf("Server started on %s\n", cfg.Address)
-	httpErr := http.ListenAndServe(cfg.Address, r)
+	server := &http.Server{
+		Addr:    cfg.Address,
+		Handler: r,
+	}
 
-	if httpErr != nil {
-		log.Fatal(httpErr)
+	serverErrors := make(chan error, 1)
+	go func() {
+		log.Printf("Server started on %s\n", cfg.Address)
+		serverErrors <- server.ListenAndServe()
+	}()
+
+	signalCtx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer stop()
+
+	var serverErr error
+	select {
+	case serverErr = <-serverErrors:
+	case <-signalCtx.Done():
+		shutdownCtx, cancelShutdown := context.WithTimeout(context.Background(), 5*time.Second)
+		if err := server.Shutdown(shutdownCtx); err != nil {
+			log.Printf("Server shutdown error: %v", err)
+		}
+		cancelShutdown()
+		serverErr = <-serverErrors
+	}
+
+	cancelSave()
+	saveWG.Wait()
+
+	if serverErr != nil && !errors.Is(serverErr, http.ErrServerClosed) {
+		log.Fatal(serverErr)
 	}
 }

@@ -112,6 +112,52 @@ func (_c *MockStorage_GetAll_Call) RunAndReturn(run func() map[string]interface{
 	return _c
 }
 
+// Save provides a mock function with given fields: path
+func (_m *MockStorage) Save(path string) error {
+	ret := _m.Called(path)
+
+	if len(ret) == 0 {
+		panic("no return value specified for Save")
+	}
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func(string) error); ok {
+		r0 = rf(path)
+	} else {
+		r0 = ret.Error(0)
+	}
+
+	return r0
+}
+
+// MockStorage_Save_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'Save'
+type MockStorage_Save_Call struct {
+	*mock.Call
+}
+
+// Save is a helper method to define mock.On call
+//   - path string
+func (_e *MockStorage_Expecter) Save(path interface{}) *MockStorage_Save_Call {
+	return &MockStorage_Save_Call{Call: _e.mock.On("Save", path)}
+}
+
+func (_c *MockStorage_Save_Call) Run(run func(path string)) *MockStorage_Save_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(string))
+	})
+	return _c
+}
+
+func (_c *MockStorage_Save_Call) Return(_a0 error) *MockStorage_Save_Call {
+	_c.Call.Return(_a0)
+	return _c
+}
+
+func (_c *MockStorage_Save_Call) RunAndReturn(run func(string) error) *MockStorage_Save_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // Set provides a mock function with given fields: name, mType, value
 func (_m *MockStorage) Set(name string, mType string, value interface{}) interface{} {
 	ret := _m.Called(name, mType, value)
