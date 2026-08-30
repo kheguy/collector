@@ -1,6 +1,7 @@
 package repository
 
 import (
+	"path/filepath"
 	"testing"
 
 	models "github.com/kheguy/collector/internal/model"
@@ -84,4 +85,18 @@ func TestMemStorage_Get_NotFound(t *testing.T) {
 	s := MakeNewMemoryStorage()
 	val := s.Get("what????")
 	assert.Nil(t, val)
+}
+
+func TestMemStorage_SaveAndRestore(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "metrics.json")
+	storage := MakeNewMemoryStorage()
+	storage.Set("wut", models.Gauge, 12.5)
+	storage.Set("bzzzzzz", models.Counter, 3)
+
+	assert.NoError(t, storage.Save(path))
+
+	restored := MakeNewMemoryStorage()
+	assert.NoError(t, restored.Restore(path))
+	assert.Equal(t, 12.5, restored.Get("wut"))
+	assert.Equal(t, 3, restored.Get("bzzzzzz"))
 }

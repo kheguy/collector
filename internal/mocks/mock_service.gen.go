@@ -110,6 +110,54 @@ func (_c *MockService_GetMetric_Call) RunAndReturn(run func(string) string) *Moc
 	return _c
 }
 
+// GetRawMetric provides a mock function with given fields: name
+func (_m *MockService) GetRawMetric(name string) interface{} {
+	ret := _m.Called(name)
+
+	if len(ret) == 0 {
+		panic("no return value specified for GetRawMetric")
+	}
+
+	var r0 interface{}
+	if rf, ok := ret.Get(0).(func(string) interface{}); ok {
+		r0 = rf(name)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(interface{})
+		}
+	}
+
+	return r0
+}
+
+// MockService_GetRawMetric_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'GetRawMetric'
+type MockService_GetRawMetric_Call struct {
+	*mock.Call
+}
+
+// GetRawMetric is a helper method to define mock.On call
+//   - name string
+func (_e *MockService_Expecter) GetRawMetric(name interface{}) *MockService_GetRawMetric_Call {
+	return &MockService_GetRawMetric_Call{Call: _e.mock.On("GetRawMetric", name)}
+}
+
+func (_c *MockService_GetRawMetric_Call) Run(run func(name string)) *MockService_GetRawMetric_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(string))
+	})
+	return _c
+}
+
+func (_c *MockService_GetRawMetric_Call) Return(_a0 interface{}) *MockService_GetRawMetric_Call {
+	_c.Call.Return(_a0)
+	return _c
+}
+
+func (_c *MockService_GetRawMetric_Call) RunAndReturn(run func(string) interface{}) *MockService_GetRawMetric_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // UpdateMetrics provides a mock function with given fields: name, typeOfValue, value
 func (_m *MockService) UpdateMetrics(name string, typeOfValue string, value interface{}) error {
 	ret := _m.Called(name, typeOfValue, value)

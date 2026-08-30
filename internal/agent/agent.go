@@ -1,14 +1,16 @@
 package agent
 
 import (
+	"bytes"
+	"compress/gzip"
 	"context"
+	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 	"math/rand/v2"
 	"net/http"
 	"runtime"
-	"strconv"
-	"strings"
 	"time"
 
 	models "github.com/kheguy/collector/internal/model"
@@ -51,41 +53,72 @@ func (a *Agent) Run(ctx context.Context, pollInterval time.Duration, reportInter
 
 func (a *Agent) sendMetrics(ctx context.Context) error {
 	for name, value := range a.storage.GetAll() {
-		var mType string
-		var mValue string
+		metric := models.Metrics{ID: name}
 
 		switch v := value.(type) {
 		case int:
-			mType = models.Counter
-			mValue = strconv.Itoa(v)
+			delta := int64(v)
+			metric.MType = models.Counter
+			metric.Delta = &delta
 		case float64:
-			mType = models.Gauge
-			mValue = strconv.FormatFloat(v, 'f', -1, 64)
+			metric.MType = models.Gauge
+			metric.Value = &v
 		default:
 			continue
 		}
 
-		// Вроде вот так через конитекст еще и запросы можно зацепить
+		body, err := json.Marshal(metric)
+		if err != nil {
+			return err
+		}
+		compressedBody, err := compress(body)
+		if err != nil {
+			return err
+		}
+
 		req, err := http.NewRequestWithContext(
 			ctx,
 			http.MethodPost,
-			fmt.Sprintf("%s/update/%s/%s/%s", a.url, mType, name, mValue),
-			strings.NewReader(""),
+			fmt.Sprintf("%s/update/", a.url),
+			bytes.NewReader(compressedBody),
 		)
 		if err != nil {
 			return err
 		}
-		req.Header.Set("Content-Type", "text/plain")
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Content-Encoding", "gzip")
+		req.Header.Set("Accept", "application/json")
+		req.Header.Set("Accept-Encoding", "gzip")
 
 		res, err := a.httpClient.Do(req)
 		if err != nil {
 			return err
 		}
+
+		if _, err := io.Copy(io.Discard, res.Body); err != nil {
+			res.Body.Close()
+			return err
+		}
 		res.Body.Close()
+		if res.StatusCode < http.StatusOK || res.StatusCode >= http.StatusMultipleChoices {
+			return fmt.Errorf("server returned status %s", res.Status)
+		}
 	}
 
 	a.storage.Clear()
 	return nil
+}
+
+func compress(data []byte) ([]byte, error) {
+	var buffer bytes.Buffer
+	writer := gzip.NewWriter(&buffer)
+	if _, err := writer.Write(data); err != nil {
+		return nil, err
+	}
+	if err := writer.Close(); err != nil {
+		return nil, err
+	}
+	return buffer.Bytes(), nil
 }
 
 func (a *Agent) collectMetrics() {

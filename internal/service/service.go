@@ -17,15 +17,20 @@ type Storage interface {
 	Get(name string) interface{}
 	GetAll() map[string]interface{}
 	Set(name string, mType string, value interface{}) interface{}
+	Save(path string) error
 }
 
 type MetricsService struct {
-	storage Storage
+	storage         Storage
+	fileStoragePath string
+	storeInterval   int
 }
 
-func MakeNewMetricsService(s Storage) *MetricsService {
+func MakeNewMetricsService(s Storage, fileStoragePath string, storeInterval int) *MetricsService {
 	return &MetricsService{
-		storage: s,
+		storage:         s,
+		fileStoragePath: fileStoragePath,
+		storeInterval:   storeInterval,
 	}
 }
 
@@ -40,6 +45,10 @@ func (s *MetricsService) GetMetric(name string) string {
 	default:
 		return ""
 	}
+}
+
+func (s *MetricsService) GetRawMetric(name string) interface{} {
+	return s.storage.Get(name)
 }
 
 func (s *MetricsService) GetAllMetrics() map[string]interface{} {
@@ -73,6 +82,9 @@ func (s *MetricsService) UpdateMetrics(name string, typeOfValue string, value in
 	}
 
 	s.storage.Set(name, typeOfValue, parsedValue)
+	if s.storeInterval == 0 {
+		return s.storage.Save(s.fileStoragePath)
+	}
 
 	return nil
 }

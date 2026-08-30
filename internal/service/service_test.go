@@ -10,7 +10,7 @@ import (
 
 func TestMakeNewMetricsService(t *testing.T) {
 	storageMock := mocks.NewMockStorage(t)
-	svc := MakeNewMetricsService(storageMock)
+	svc := MakeNewMetricsService(storageMock, "", 1)
 	assert.NotNil(t, svc)
 	assert.Equal(t, storageMock, svc.storage)
 }
@@ -18,7 +18,7 @@ func TestMakeNewMetricsService(t *testing.T) {
 func TestGetMetric_Int(t *testing.T) {
 	storageMock := mocks.NewMockStorage(t)
 	storageMock.EXPECT().Get("some_metrics").Return(111111).Once()
-	svc := MakeNewMetricsService(storageMock)
+	svc := MakeNewMetricsService(storageMock, "", 1)
 
 	result := svc.GetMetric("some_metrics")
 	assert.Equal(t, "111111", result)
@@ -27,7 +27,7 @@ func TestGetMetric_Int(t *testing.T) {
 func TestGetMetric_Float64(t *testing.T) {
 	storageMock := mocks.NewMockStorage(t)
 	storageMock.EXPECT().Get("some_metrics").Return(11.111).Once()
-	svc := MakeNewMetricsService(storageMock)
+	svc := MakeNewMetricsService(storageMock, "", 1)
 
 	result := svc.GetMetric("some_metrics")
 	assert.Equal(t, "11.111", result)
@@ -36,10 +36,20 @@ func TestGetMetric_Float64(t *testing.T) {
 func TestGetMetric_NotFound(t *testing.T) {
 	storageMock := mocks.NewMockStorage(t)
 	storageMock.EXPECT().Get("what??????????").Return(nil).Once()
-	svc := MakeNewMetricsService(storageMock)
+	svc := MakeNewMetricsService(storageMock, "", 1)
 
 	result := svc.GetMetric("what??????????")
 	assert.Equal(t, "", result)
+}
+
+func TestGetRawMetric(t *testing.T) {
+	storageMock := mocks.NewMockStorage(t)
+	storageMock.EXPECT().Get("PollCount").Return(3).Once()
+	svc := MakeNewMetricsService(storageMock, "", 1)
+
+	result := svc.GetRawMetric("PollCount")
+
+	assert.Equal(t, 3, result)
 }
 
 func TestGetAllMetrics(t *testing.T) {
@@ -49,7 +59,7 @@ func TestGetAllMetrics(t *testing.T) {
 	}
 	storageMock := mocks.NewMockStorage(t)
 	storageMock.EXPECT().GetAll().Return(expected).Once()
-	svc := MakeNewMetricsService(storageMock)
+	svc := MakeNewMetricsService(storageMock, "", 1)
 
 	result := svc.GetAllMetrics()
 	assert.Equal(t, expected, result)
@@ -58,7 +68,7 @@ func TestGetAllMetrics(t *testing.T) {
 func TestUpdateMetrics_Gauge_Success(t *testing.T) {
 	storageMock := mocks.NewMockStorage(t)
 	storageMock.EXPECT().Set("oneone", models.Gauge, 11.11111).Return(nil).Once()
-	svc := MakeNewMetricsService(storageMock)
+	svc := MakeNewMetricsService(storageMock, "", 1)
 
 	err := svc.UpdateMetrics("oneone", models.Gauge, "11.11111")
 
@@ -68,16 +78,27 @@ func TestUpdateMetrics_Gauge_Success(t *testing.T) {
 func TestUpdateMetrics_Counter_Success(t *testing.T) {
 	storageMock := mocks.NewMockStorage(t)
 	storageMock.EXPECT().Set("requests", models.Counter, 11).Return(nil).Once()
-	svc := MakeNewMetricsService(storageMock)
+	svc := MakeNewMetricsService(storageMock, "", 1)
 
 	err := svc.UpdateMetrics("requests", models.Counter, "11")
 
 	assert.NoError(t, err)
 }
 
+func TestUpdateMetrics_WithSave(t *testing.T) {
+	storageMock := mocks.NewMockStorage(t)
+	storageMock.EXPECT().Set("requests", models.Counter, 1).Return(nil).Once()
+	storageMock.EXPECT().Save("metrics.json").Return(nil).Once()
+	svc := MakeNewMetricsService(storageMock, "metrics.json", 0)
+
+	err := svc.UpdateMetrics("requests", models.Counter, "1")
+
+	assert.NoError(t, err)
+}
+
 func TestUpdateMetrics_Counter_InvalidString(t *testing.T) {
 	storageMock := mocks.NewMockStorage(t)
-	svc := MakeNewMetricsService(storageMock)
+	svc := MakeNewMetricsService(storageMock, "", 1)
 
 	err := svc.UpdateMetrics("requests", models.Counter, "NaN")
 
@@ -86,7 +107,7 @@ func TestUpdateMetrics_Counter_InvalidString(t *testing.T) {
 
 func TestUpdateMetrics_UnknownType(t *testing.T) {
 	storageMock := mocks.NewMockStorage(t)
-	svc := MakeNewMetricsService(storageMock)
+	svc := MakeNewMetricsService(storageMock, "", 1)
 
 	err := svc.UpdateMetrics("test", "what????????", "123")
 

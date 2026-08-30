@@ -15,7 +15,7 @@ import (
 )
 
 func main() {
-	cfg, cfgErr := config.Load()
+	cfg, cfgErr := config.LoadAgent()
 
 	if cfgErr != nil {
 		log.Fatal("Config loading error: ", cfgErr)
@@ -23,7 +23,6 @@ func main() {
 
 	storage := repository.MakeNewMemoryStorage()
 
-	// Возможно, стоит вынести в отделбную либу
 	addressWithProtocol := cfg.Address
 
 	if !strings.Contains(addressWithProtocol, "http://") && !strings.Contains(addressWithProtocol, "https://") {
