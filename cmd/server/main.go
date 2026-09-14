@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/kheguy/collector/internal/config"
 	"github.com/kheguy/collector/internal/handler"
@@ -69,9 +70,18 @@ func main() {
 		}()
 	}
 
+	// В общем, тут сначала был Coon, но я почитал, что безопаснее пулл, поэтому вот так
+	pool, err := pgxpool.New(context.Background(), cfg.DBAddress)
+	if err != nil {
+		log.Fatal("Unable to connect to database: ", err)
+	}
+	defer pool.Close()
+
 	metricsService := service.MakeNewMetricsService(storage, cfg.FileStoragePath, cfg.StoreInterval)
 
 	metricsHandler := handler.MakeNewMetricsHandler(metricsService, renderer)
+	healthHandler := handler.MakeNewHealthHandler(pool)
+	handler.MakeNewCommonHandler()
 
 	r.Post(`/update/{type}/{name}/{value}`, metricsHandler.UpdateHandler)
 	r.Post(`/update`, metricsHandler.JSONUpdateHandler)
@@ -79,6 +89,9 @@ func main() {
 	r.Get(`/value/{type}/{name}`, metricsHandler.ValueHandler)
 	r.Post(`/value`, metricsHandler.JSONValueHandler)
 	r.Post(`/value/`, metricsHandler.JSONValueHandler)
+
+	r.Get(`/ping`, healthHandler.PingHandler)
+
 	r.Get(`/`, metricsHandler.HTMLListHandler)
 
 	server := &http.Server{

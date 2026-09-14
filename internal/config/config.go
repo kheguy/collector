@@ -18,6 +18,7 @@ type ServerConfig struct {
 	StoreInterval   int    `env:"STORE_INTERVAL"`
 	FileStoragePath string `env:"FILE_STORAGE_PATH"`
 	Restore         bool   `env:"RESTORE"`
+	DBAddress       string `env:"DATABASE_DSN"`
 }
 
 // Разделил так как уже путаница началась
@@ -48,6 +49,7 @@ func LoadServer() (ServerConfig, error) {
 		StoreInterval:   300,
 		FileStoragePath: "/tmp/collector-metrics.json",
 		Restore:         true,
+		DBAddress:       "postgres://user:password@localhost:5432/db",
 	}
 
 	flags := flag.NewFlagSet("server", flag.ContinueOnError)
@@ -55,6 +57,7 @@ func LoadServer() (ServerConfig, error) {
 	flags.IntVar(&cfg.StoreInterval, "i", cfg.StoreInterval, "Store interval")
 	flags.StringVar(&cfg.FileStoragePath, "f", cfg.FileStoragePath, "File storage path")
 	flags.BoolVar(&cfg.Restore, "r", cfg.Restore, "Restore metrics")
+	flags.StringVar(&cfg.DBAddress, "d", cfg.DBAddress, "Database address")
 
 	if err := flags.Parse(os.Args[1:]); err != nil {
 		return ServerConfig{}, err

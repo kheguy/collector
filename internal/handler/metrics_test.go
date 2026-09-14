@@ -99,15 +99,3 @@ func TestHTMLListHandler(t *testing.T) {
 	assert.Equal(t, http.StatusOK, w.Code)
 	require.NotNil(t, capturedData)
 }
-
-func TestNotFoundHandler(t *testing.T) {
-	handler := MakeNewMetricsHandler(mocks.NewMockService(t), mocks.NewMockRenderer(t))
-
-	req := httptest.NewRequest("GET", "/any", nil)
-	w := httptest.NewRecorder()
-
-	handler.NotFoundHandler(w, req)
-
-	assert.Equal(t, http.StatusNotFound, w.Code)
-	assert.Equal(t, "Not found", w.Body.String())
-}

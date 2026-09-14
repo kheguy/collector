@@ -8,9 +8,9 @@ import (
 )
 
 var (
-	parseFloatError = errors.New("can't parse gauge string to float64")
-	parseIntError   = errors.New("can't parse counter string to int")
-	uknownTypeError = errors.New("unknown metric type")
+	errParseFloat  = errors.New("can't parse gauge string to float64")
+	errParseInt    = errors.New("can't parse counter string to int")
+	errUnknownType = errors.New("unknown metric type")
 )
 
 type Storage interface {
@@ -65,7 +65,7 @@ func (s *MetricsService) UpdateMetrics(name string, typeOfValue string, value in
 			if val, err := strconv.ParseFloat(str, 64); err == nil {
 				parsedValue = val
 			} else {
-				return parseFloatError
+				return errParseFloat
 			}
 		}
 
@@ -74,11 +74,11 @@ func (s *MetricsService) UpdateMetrics(name string, typeOfValue string, value in
 			if val, err := strconv.Atoi(str); err == nil {
 				parsedValue = val
 			} else {
-				return parseIntError
+				return errParseInt
 			}
 		}
 	default:
-		return uknownTypeError
+		return errUnknownType
 	}
 
 	s.storage.Set(name, typeOfValue, parsedValue)
