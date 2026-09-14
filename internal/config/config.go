@@ -18,7 +18,7 @@ type ServerConfig struct {
 	StoreInterval   int    `env:"STORE_INTERVAL"`
 	FileStoragePath string `env:"FILE_STORAGE_PATH"`
 	Restore         bool   `env:"RESTORE"`
-	DBAddress       string `env:DATABASE_DSN`
+	DBAddress       string `env:"DATABASE_DSN"`
 }
 
 // Разделил так как уже путаница началась
