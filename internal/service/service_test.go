@@ -102,7 +102,7 @@ func TestUpdateMetrics_Counter_InvalidString(t *testing.T) {
 
 	err := svc.UpdateMetrics("requests", models.Counter, "NaN")
 
-	assert.ErrorIs(t, err, parseIntError)
+	assert.ErrorIs(t, err, errParseInt)
 }
 
 func TestUpdateMetrics_UnknownType(t *testing.T) {
@@ -111,5 +111,5 @@ func TestUpdateMetrics_UnknownType(t *testing.T) {
 
 	err := svc.UpdateMetrics("test", "what????????", "123")
 
-	assert.ErrorIs(t, err, uknownTypeError)
+	assert.ErrorIs(t, err, errUnknownType)
 }
