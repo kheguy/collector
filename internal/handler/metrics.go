@@ -188,8 +188,3 @@ func (h *MetricsHandler) HTMLListHandler(res http.ResponseWriter, req *http.Requ
 
 	h.renderer.Render(res, "list", data)
 }
-
-func (h *MetricsHandler) NotFoundHandler(res http.ResponseWriter, req *http.Request) {
-	res.WriteHeader(http.StatusNotFound)
-	res.Write([]byte(`Not found`))
-}
