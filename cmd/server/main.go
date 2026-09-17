@@ -19,6 +19,7 @@ import (
 	"github.com/kheguy/collector/internal/repository"
 	"github.com/kheguy/collector/internal/service"
 	"github.com/kheguy/collector/internal/templates"
+	"github.com/kheguy/collector/migrations"
 )
 
 func main() {
@@ -41,6 +42,10 @@ func main() {
 	var saveWG sync.WaitGroup
 	var storage service.Storage
 	if cfg.DBAddress != "" {
+		if err := migrations.Up(cfg.DBAddress); err != nil {
+			log.Fatal("Database migration error: ", err)
+		}
+
 		// В общем, тут сначала был Coon, но я почитал, что безопаснее пулл, поэтому вот так
 		pool, err := pgxpool.New(context.Background(), cfg.DBAddress)
 		if err != nil {
