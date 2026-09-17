@@ -37,50 +37,72 @@ func main() {
 	r.Use(middlewares.WithLogging)
 	r.Use(middlewares.WithGzip)
 
-	storage := repository.MakeNewMemoryStorage()
+	var cancelSave context.CancelFunc = func() {}
+	var saveWG sync.WaitGroup
+	var storage service.Storage
+	if cfg.DBAddress != "" {
+		// В общем, тут сначала был Coon, но я почитал, что безопаснее пулл, поэтому вот так
+		pool, err := pgxpool.New(context.Background(), cfg.DBAddress)
+		if err != nil {
+			log.Fatal("Unable to connect to database: ", err)
+		}
+		defer pool.Close()
 
-	if cfg.Restore {
-		if err := storage.Restore(cfg.FileStoragePath); err != nil {
-			log.Fatal("Metrics restore error: ", err)
+		storage = repository.NewDBStorage(pool)
+
+		// Он же по сути только для кейса с БД нужен
+		healthHandler := handler.MakeNewHealthHandler(pool)
+		r.Get(`/ping`, healthHandler.PingHandler)
+	} else {
+		storage = repository.NewMemoryStorage()
+		fileProccessor := repository.NewFileProcessor(cfg.FileStoragePath)
+
+		if cfg.Restore {
+			restoredData, err := fileProccessor.Restore()
+			if err != nil {
+				log.Fatal("Metrics restore error: ", err)
+			}
+			storage.SetAll(restoredData, context.Background())
+		}
+
+		saveCtx, cancel := context.WithCancel(context.Background())
+		cancelSave = cancel
+
+		if cfg.StoreInterval > 0 {
+			saveWG.Add(1)
+			go func() {
+				defer saveWG.Done()
+				ticker := time.NewTicker(time.Duration(cfg.StoreInterval) * time.Second)
+				defer ticker.Stop()
+				for {
+					select {
+					case <-ticker.C:
+						data, err := storage.GetAll(context.Background())
+						if err != nil {
+							log.Printf("Metrics save error: %v", err)
+						}
+						if err := fileProccessor.Save(data); err != nil {
+							log.Printf("Metrics save error: %v", err)
+						}
+					case <-saveCtx.Done():
+						data, err := storage.GetAll(context.Background())
+						if err != nil {
+							log.Printf("Final metrics save error: %v", err)
+						}
+						if err := fileProccessor.Save(data); err != nil {
+							log.Printf("Final metrics save error: %v", err)
+						}
+						return
+					}
+				}
+			}()
 		}
 	}
 
-	saveCtx, cancelSave := context.WithCancel(context.Background())
-	var saveWG sync.WaitGroup
-
-	if cfg.StoreInterval > 0 {
-		saveWG.Add(1)
-		go func() {
-			defer saveWG.Done()
-			ticker := time.NewTicker(time.Duration(cfg.StoreInterval) * time.Second)
-			defer ticker.Stop()
-			for {
-				select {
-				case <-ticker.C:
-					if err := storage.Save(cfg.FileStoragePath); err != nil {
-						log.Printf("Metrics save error: %v", err)
-					}
-				case <-saveCtx.Done():
-					if err := storage.Save(cfg.FileStoragePath); err != nil {
-						log.Printf("Final metrics save error: %v", err)
-					}
-					return
-				}
-			}
-		}()
-	}
-
-	// В общем, тут сначала был Coon, но я почитал, что безопаснее пулл, поэтому вот так
-	pool, err := pgxpool.New(context.Background(), cfg.DBAddress)
-	if err != nil {
-		log.Fatal("Unable to connect to database: ", err)
-	}
-	defer pool.Close()
-
-	metricsService := service.MakeNewMetricsService(storage, cfg.FileStoragePath, cfg.StoreInterval)
+	metricsService := service.MakeNewMetricsService(storage)
 
 	metricsHandler := handler.MakeNewMetricsHandler(metricsService, renderer)
-	healthHandler := handler.MakeNewHealthHandler(pool)
+
 	handler.MakeNewCommonHandler()
 
 	r.Post(`/update/{type}/{name}/{value}`, metricsHandler.UpdateHandler)
@@ -89,8 +111,6 @@ func main() {
 	r.Get(`/value/{type}/{name}`, metricsHandler.ValueHandler)
 	r.Post(`/value`, metricsHandler.JSONValueHandler)
 	r.Post(`/value/`, metricsHandler.JSONValueHandler)
-
-	r.Get(`/ping`, healthHandler.PingHandler)
 
 	r.Get(`/`, metricsHandler.HTMLListHandler)
 

@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"strconv"
@@ -9,10 +10,10 @@ import (
 )
 
 type Service interface {
-	GetMetric(name string) string
-	GetRawMetric(name string) interface{}
-	GetAllMetrics() map[string]interface{}
-	UpdateMetrics(name string, typeOfValue string, value interface{}) error
+	GetMetric(name string, ctx context.Context) (string, error)
+	GetRawMetric(name string, ctx context.Context) (interface{}, error)
+	GetAllMetrics(ctx context.Context) (map[string]interface{}, error)
+	UpdateMetrics(name string, typeOfValue string, value interface{}, ctx context.Context) error
 }
 
 type Renderer interface {
@@ -39,7 +40,12 @@ func (h *MetricsHandler) ValueHandler(res http.ResponseWriter, req *http.Request
 		return
 	}
 
-	metricValue := h.service.GetMetric(name)
+	metricValue, err := h.service.GetMetric(name, req.Context())
+
+	if err != nil {
+		http.Error(res, http.StatusText(500), http.StatusInternalServerError)
+		return
+	}
 
 	if metricValue == "" {
 		http.Error(res, http.StatusText(404), http.StatusNotFound)
@@ -60,10 +66,10 @@ func (h *MetricsHandler) UpdateHandler(res http.ResponseWriter, req *http.Reques
 		return
 	}
 
-	err := h.service.UpdateMetrics(name, typeOfValue, value)
+	err := h.service.UpdateMetrics(name, typeOfValue, value, req.Context())
 
 	if err != nil {
-		http.Error(res, http.StatusText(400), http.StatusBadRequest)
+		http.Error(res, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
 		return
 	}
 
@@ -101,12 +107,18 @@ func (h *MetricsHandler) JSONUpdateHandler(res http.ResponseWriter, req *http.Re
 		http.Error(res, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
 		return
 	}
-	if err := h.service.UpdateMetrics(metric.ID, metric.MType, value); err != nil {
+	if err := h.service.UpdateMetrics(metric.ID, metric.MType, value, req.Context()); err != nil {
 		http.Error(res, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
 		return
 	}
 
-	stored := h.service.GetRawMetric(metric.ID)
+	stored, err := h.service.GetRawMetric(metric.ID, req.Context())
+
+	if err != nil {
+		http.Error(res, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+		return
+	}
+
 	if stored == nil {
 		http.Error(res, http.StatusText(http.StatusNotFound), http.StatusNotFound)
 		return
@@ -126,7 +138,13 @@ func (h *MetricsHandler) JSONValueHandler(res http.ResponseWriter, req *http.Req
 		return
 	}
 
-	stored := h.service.GetRawMetric(metric.ID)
+	stored, err := h.service.GetRawMetric(metric.ID, req.Context())
+
+	if err != nil {
+		http.Error(res, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+		return
+	}
+
 	if stored == nil {
 		http.Error(res, http.StatusText(http.StatusNotFound), http.StatusNotFound)
 		return
@@ -166,7 +184,14 @@ func (h *MetricsHandler) HTMLListHandler(res http.ResponseWriter, req *http.Requ
 
 	metrics := make([]models.MetricItem, 0)
 
-	for name, value := range h.service.GetAllMetrics() {
+	m, err := h.service.GetAllMetrics(req.Context())
+
+	if err != nil {
+		http.Error(res, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+		return
+	}
+
+	for name, value := range m {
 		var mValue string
 		switch v := value.(type) {
 		case int:

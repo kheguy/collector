@@ -1,6 +1,7 @@
 package service
 
 import (
+	"context"
 	"errors"
 	"strconv"
 
@@ -14,48 +15,48 @@ var (
 )
 
 type Storage interface {
-	Get(name string) interface{}
-	GetAll() map[string]interface{}
-	Set(name string, mType string, value interface{}) interface{}
-	Save(path string) error
+	Get(name string, ctx context.Context) (interface{}, error)
+	GetAll(ctx context.Context) (map[string]interface{}, error)
+	Set(name string, mType string, value interface{}, ctx context.Context) error
+	SetAll(data map[string]interface{}, ctx context.Context) error
 }
 
 type MetricsService struct {
-	storage         Storage
-	fileStoragePath string
-	storeInterval   int
+	storage Storage
 }
 
-func MakeNewMetricsService(s Storage, fileStoragePath string, storeInterval int) *MetricsService {
+func MakeNewMetricsService(s Storage) *MetricsService {
 	return &MetricsService{
-		storage:         s,
-		fileStoragePath: fileStoragePath,
-		storeInterval:   storeInterval,
+		storage: s,
 	}
 }
 
-func (s *MetricsService) GetMetric(name string) string {
-	value := s.storage.Get(name)
+func (s *MetricsService) GetMetric(name string, ctx context.Context) (string, error) {
+	value, err := s.storage.Get(name, ctx)
+
+	if err != nil {
+		return "", err
+	}
 
 	switch v := value.(type) {
 	case int:
-		return strconv.Itoa(v)
+		return strconv.Itoa(v), nil
 	case float64:
-		return strconv.FormatFloat(v, 'f', -1, 64)
+		return strconv.FormatFloat(v, 'f', -1, 64), nil
 	default:
-		return ""
+		return "", nil
 	}
 }
 
-func (s *MetricsService) GetRawMetric(name string) interface{} {
-	return s.storage.Get(name)
+func (s *MetricsService) GetRawMetric(name string, ctx context.Context) (interface{}, error) {
+	return s.storage.Get(name, ctx)
 }
 
-func (s *MetricsService) GetAllMetrics() map[string]interface{} {
-	return s.storage.GetAll()
+func (s *MetricsService) GetAllMetrics(ctx context.Context) (map[string]interface{}, error) {
+	return s.storage.GetAll(ctx)
 }
 
-func (s *MetricsService) UpdateMetrics(name string, typeOfValue string, value interface{}) error {
+func (s *MetricsService) UpdateMetrics(name string, typeOfValue string, value interface{}, ctx context.Context) error {
 
 	var parsedValue interface{}
 
@@ -81,10 +82,7 @@ func (s *MetricsService) UpdateMetrics(name string, typeOfValue string, value in
 		return errUnknownType
 	}
 
-	s.storage.Set(name, typeOfValue, parsedValue)
-	if s.storeInterval == 0 {
-		return s.storage.Save(s.fileStoragePath)
-	}
+	err := s.storage.Set(name, typeOfValue, parsedValue, ctx)
 
-	return nil
+	return err
 }

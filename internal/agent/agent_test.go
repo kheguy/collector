@@ -3,7 +3,6 @@ package agent
 import (
 	"context"
 	"net/http"
-	"net/http/httptest"
 	"testing"
 	"time"
 
@@ -13,35 +12,47 @@ import (
 	"github.com/kheguy/collector/internal/repository"
 )
 
+const testAgentURL = "http://collector.test"
+
+type roundTripFunc func(*http.Request) (*http.Response, error)
+
+func (f roundTripFunc) RoundTrip(req *http.Request) (*http.Response, error) {
+	return f(req)
+}
+
+func testHTTPClient() http.Client {
+	return http.Client{
+		Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+			return &http.Response{
+				StatusCode: http.StatusOK,
+				Status:     "200 OK",
+				Body:       http.NoBody,
+				Request:    req,
+			}, nil
+		}),
+	}
+}
+
 func TestNewAgent(t *testing.T) {
-	storage := repository.MakeNewMemoryStorage()
+	storage := repository.NewMemoryStorage()
 
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(`{"status":"ok"}`))
-	}))
-	defer server.Close()
-
-	agent := NewAgent(storage, server.URL, http.Client{})
+	agent := NewAgent(storage, testAgentURL, testHTTPClient())
 
 	assert.NotNil(t, agent)
 	assert.NotNil(t, agent.url)
 }
 
 func TestAgent_CollectRuntimeMetrics(t *testing.T) {
-	storage := repository.MakeNewMemoryStorage()
+	storage := repository.NewMemoryStorage()
+	ctx := context.Background()
 
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(`{"status":"ok"}`))
-	}))
-	defer server.Close()
+	agent := NewAgent(storage, testAgentURL, testHTTPClient())
 
-	agent := NewAgent(storage, server.URL, http.Client{})
+	err := agent.collectRuntimeMetrics(ctx)
+	assert.NoError(t, err)
 
-	agent.collectRuntimeMetrics()
-
-	metrics := storage.GetAll()
+	metrics, err := storage.GetAll(ctx)
+	assert.NoError(t, err)
 	assert.NotEmpty(t, metrics)
 
 	expectedMetrics := []string{
@@ -84,68 +95,63 @@ func TestAgent_CollectRuntimeMetrics(t *testing.T) {
 }
 
 func TestAgent_CollectCustomMetrics(t *testing.T) {
-	storage := repository.MakeNewMemoryStorage()
+	storage := repository.NewMemoryStorage()
+	ctx := context.Background()
 
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(`{"status":"ok"}`))
-	}))
-	defer server.Close()
+	err := storage.Set("PollCount", models.Counter, 5, ctx)
+	assert.NoError(t, err)
 
-	storage.Set("PollCount", models.Counter, 5)
+	agent := NewAgent(storage, testAgentURL, testHTTPClient())
 
-	agent := NewAgent(storage, server.URL, http.Client{})
+	err = agent.collectCustomMetrics(ctx)
+	assert.NoError(t, err)
 
-	agent.collectCustomMetrics()
-
-	pollCount := storage.Get("PollCount")
+	pollCount, err := storage.Get("PollCount", ctx)
+	assert.NoError(t, err)
 	assert.NotNil(t, pollCount)
 	assert.Equal(t, 6, pollCount)
 
-	randomValue := storage.Get("RandomValue")
+	randomValue, err := storage.Get("RandomValue", ctx)
+	assert.NoError(t, err)
 	assert.NotNil(t, randomValue)
 }
 
 func TestAgent_CollectCustomMetrics_WithNoExistingPollCount(t *testing.T) {
-	storage := repository.MakeNewMemoryStorage()
+	storage := repository.NewMemoryStorage()
+	ctx := context.Background()
 
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(`{"status":"ok"}`))
-	}))
-	defer server.Close()
-
-	agent := NewAgent(storage, server.URL, http.Client{})
+	agent := NewAgent(storage, testAgentURL, testHTTPClient())
 
 	// Не устанавливаем PollCount заранее
-	agent.collectCustomMetrics()
+	err := agent.collectCustomMetrics(ctx)
+	assert.NoError(t, err)
 
-	pollCount := storage.Get("PollCount")
+	pollCount, err := storage.Get("PollCount", ctx)
+	assert.NoError(t, err)
 	assert.NotNil(t, pollCount)
 	assert.Equal(t, 1, pollCount.(int))
 }
 
 func TestAgent_CollectMetrics(t *testing.T) {
-	storage := repository.MakeNewMemoryStorage()
+	storage := repository.NewMemoryStorage()
+	ctx := context.Background()
 
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(`{"status":"ok"}`))
-	}))
-	defer server.Close()
+	agent := NewAgent(storage, testAgentURL, testHTTPClient())
 
-	agent := NewAgent(storage, server.URL, http.Client{})
+	err := agent.collectMetrics(ctx)
+	assert.NoError(t, err)
 
-	agent.collectMetrics()
-
-	metrics := storage.GetAll()
+	metrics, err := storage.GetAll(ctx)
+	assert.NoError(t, err)
 	assert.NotEmpty(t, metrics)
 
-	pollCount := storage.Get("PollCount")
+	pollCount, err := storage.Get("PollCount", ctx)
+	assert.NoError(t, err)
 	assert.NotNil(t, pollCount)
 	assert.Equal(t, 1, pollCount.(int))
 
-	randomValue := storage.Get("RandomValue")
+	randomValue, err := storage.Get("RandomValue", ctx)
+	assert.NoError(t, err)
 	assert.NotNil(t, randomValue)
 
 	// Пару метрик проверяем
@@ -154,15 +160,9 @@ func TestAgent_CollectMetrics(t *testing.T) {
 }
 
 func TestAgent_RunStopsAfterContextCancellation(t *testing.T) {
-	storage := repository.MakeNewMemoryStorage()
+	storage := repository.NewMemoryStorage()
 
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(`{"status":"ok"}`))
-	}))
-	defer server.Close()
-
-	agent := NewAgent(storage, server.URL, http.Client{})
+	agent := NewAgent(storage, testAgentURL, testHTTPClient())
 
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan struct{})
@@ -181,15 +181,9 @@ func TestAgent_RunStopsAfterContextCancellation(t *testing.T) {
 }
 
 func TestAgent_RunCollectsMetrics(t *testing.T) {
-	storage := repository.MakeNewMemoryStorage()
+	storage := repository.NewMemoryStorage()
 
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(`{"status":"ok"}`))
-	}))
-	defer server.Close()
-
-	agent := NewAgent(storage, server.URL, http.Client{})
+	agent := NewAgent(storage, testAgentURL, testHTTPClient())
 
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan struct{})
@@ -201,7 +195,8 @@ func TestAgent_RunCollectsMetrics(t *testing.T) {
 	cancel()
 	<-done
 
-	metrics := storage.GetAll()
+	metrics, err := storage.GetAll(context.Background())
+	assert.NoError(t, err)
 	assert.NotEmpty(t, metrics)
 	assert.Contains(t, metrics, "PollCount")
 	assert.Greater(t, metrics["PollCount"].(int), 0)

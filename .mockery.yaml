@@ -14,3 +14,21 @@ packages:
   github.com/kheguy/collector/internal/service:
     interfaces:
       Storage:
+  github.com/kheguy/collector/internal/repository:
+    config:
+      dir: internal/mocks
+      outpkg: mocks
+    interfaces:
+      Pool:
+        config:
+          filename: mock_db_pool.gen.go
+          mockname: MockDBPool
+  github.com/jackc/pgx/v5:
+    config:
+      dir: internal/mocks
+      outpkg: mocks
+    interfaces:
+      Row:
+        config:
+          filename: mock_pgx_row.gen.go
+          mockname: MockPGXRow

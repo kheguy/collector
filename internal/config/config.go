@@ -49,7 +49,7 @@ func LoadServer() (ServerConfig, error) {
 		StoreInterval:   300,
 		FileStoragePath: "/tmp/collector-metrics.json",
 		Restore:         true,
-		DBAddress:       "postgres://user:password@localhost:5432/db",
+		DBAddress:       "postgres://postgres@localhost:5432/postgres?sslmode=disable",
 	}
 
 	flags := flag.NewFlagSet("server", flag.ContinueOnError)
