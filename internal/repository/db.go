@@ -3,11 +3,13 @@ package repository
 import (
 	"context"
 	"errors"
+	"strings"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 	models "github.com/kheguy/collector/internal/model"
+	"github.com/kheguy/collector/internal/retry"
 )
 
 type commandExecutor interface {
@@ -32,27 +34,40 @@ func NewDBStorage(p Pool) *DBStorage {
 }
 
 func (s *DBStorage) Get(name string, ctx context.Context) (interface{}, error) {
-	var mType string
-	var delta pgtype.Int8
-	var value pgtype.Float8
+	var result interface{}
+	err := retry.Do(ctx, func() error {
+		var mType string
+		var delta pgtype.Int8
+		var value pgtype.Float8
 
-	err := s.pool.QueryRow(
-		ctx,
-		"SELECT mtype, delta, value FROM metrics WHERE name = $1",
-		name,
-	).Scan(&mType, &delta, &value)
-	if errors.Is(err, pgx.ErrNoRows) {
-		return nil, nil
-	}
-	if err != nil {
-		return nil, err
-	}
+		err := s.pool.QueryRow(
+			ctx,
+			"SELECT mtype, delta, value FROM metrics WHERE name = $1",
+			name,
+		).Scan(&mType, &delta, &value)
+		if errors.Is(err, pgx.ErrNoRows) {
+			result = nil
+			return nil
+		}
+		if err != nil {
+			return err
+		}
 
-	return metricValue(mType, delta, value)
+		metric, err := metricValue(mType, delta, value)
+		if err != nil {
+			return err
+		}
+		result = metric
+		return nil
+	}, isRetriablePostgresError)
+
+	return result, err
 }
 
 func (s *DBStorage) Set(name string, mType string, value interface{}, ctx context.Context) error {
-	return upsertMetric(ctx, s.pool, name, mType, value)
+	return retry.Do(ctx, func() error {
+		return upsertMetric(ctx, s.pool, name, mType, value)
+	}, isRetriablePostgresError)
 }
 
 func (s *DBStorage) SetBatch(metrics []models.Metrics, ctx context.Context) error {
@@ -69,6 +84,12 @@ func (s *DBStorage) SetBatch(metrics []models.Metrics, ctx context.Context) erro
 		values[i] = value
 	}
 
+	return retry.Do(ctx, func() error {
+		return s.setBatchOnce(metrics, values, ctx)
+	}, isRetriablePostgresError)
+}
+
+func (s *DBStorage) setBatchOnce(metrics []models.Metrics, values []interface{}, ctx context.Context) error {
 	tx, err := s.pool.Begin(ctx)
 	if err != nil {
 		return err
@@ -140,6 +161,17 @@ func upsertMetric(ctx context.Context, executor commandExecutor, name string, mT
 }
 
 func (s *DBStorage) GetAll(ctx context.Context) (map[string]interface{}, error) {
+	var result map[string]interface{}
+	err := retry.Do(ctx, func() error {
+		var err error
+		result, err = s.getAllOnce(ctx)
+		return err
+	}, isRetriablePostgresError)
+
+	return result, err
+}
+
+func (s *DBStorage) getAllOnce(ctx context.Context) (map[string]interface{}, error) {
 	rows, err := s.pool.Query(ctx, "SELECT name, mtype, delta, value FROM metrics")
 	if err != nil {
 		return nil, err
@@ -172,6 +204,12 @@ func (s *DBStorage) GetAll(ctx context.Context) (map[string]interface{}, error) 
 }
 
 func (s *DBStorage) SetAll(data map[string]interface{}, ctx context.Context) error {
+	return retry.Do(ctx, func() error {
+		return s.setAllOnce(data, ctx)
+	}, isRetriablePostgresError)
+}
+
+func (s *DBStorage) setAllOnce(data map[string]interface{}, ctx context.Context) error {
 	tx, err := s.pool.Begin(ctx)
 	if err != nil {
 		return err
@@ -198,10 +236,24 @@ func (s *DBStorage) SetAll(data map[string]interface{}, ctx context.Context) err
 }
 
 func (s *DBStorage) Clear(ctx context.Context) error {
-	if _, err := s.pool.Exec(ctx, "DELETE FROM metrics"); err != nil {
+	return retry.Do(ctx, func() error {
+		_, err := s.pool.Exec(ctx, "DELETE FROM metrics")
 		return err
+	}, isRetriablePostgresError)
+}
+
+func isRetriablePostgresError(err error) bool {
+	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		return false
 	}
-	return nil
+
+	var pgErr *pgconn.PgError
+	if errors.As(err, &pgErr) && strings.HasPrefix(pgErr.Code, "08") {
+		return true
+	}
+
+	var connectErr *pgconn.ConnectError
+	return errors.As(err, &connectErr)
 }
 
 func metricValue(mType string, delta pgtype.Int8, value pgtype.Float8) (interface{}, error) {

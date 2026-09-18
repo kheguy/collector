@@ -15,6 +15,7 @@ import (
 
 	models "github.com/kheguy/collector/internal/model"
 	"github.com/kheguy/collector/internal/repository"
+	"github.com/kheguy/collector/internal/retry"
 )
 
 type Agent struct {
@@ -91,7 +92,7 @@ func (a *Agent) sendMetrics(ctx context.Context) error {
 		return err
 	}
 
-	req, err := http.NewRequestWithContext(
+	requestTemplate, err := http.NewRequestWithContext(
 		ctx,
 		http.MethodPost,
 		fmt.Sprintf("%s/updates/", a.url),
@@ -100,12 +101,24 @@ func (a *Agent) sendMetrics(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Content-Encoding", "gzip")
-	req.Header.Set("Accept", "application/json")
-	req.Header.Set("Accept-Encoding", "gzip")
+	requestTemplate.Header.Set("Content-Type", "application/json")
+	requestTemplate.Header.Set("Content-Encoding", "gzip")
+	requestTemplate.Header.Set("Accept", "application/json")
+	requestTemplate.Header.Set("Accept-Encoding", "gzip")
 
-	res, err := a.httpClient.Do(req)
+	var res *http.Response
+	err = retry.Do(
+		ctx,
+		func() error {
+			req := requestTemplate.Clone(ctx)
+			req.Body = io.NopCloser(bytes.NewReader(compressedBody))
+			res, err = a.httpClient.Do(req)
+			return err
+		},
+		func(error) bool {
+			return ctx.Err() == nil
+		},
+	)
 	if err != nil {
 		return err
 	}

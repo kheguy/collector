@@ -151,3 +151,23 @@ func TestDBStorage_Clear(t *testing.T) {
 
 	assert.NoError(t, err)
 }
+
+func TestIsRetriablePostgresError(t *testing.T) {
+	tests := []struct {
+		name string
+		err  error
+		want bool
+	}{
+		{name: "connection SQLSTATE", err: &pgconn.PgError{Code: "08006"}, want: true},
+		{name: "other SQLSTATE", err: &pgconn.PgError{Code: "23505"}, want: false},
+		{name: "canceled", err: context.Canceled, want: false},
+		{name: "deadline exceeded", err: context.DeadlineExceeded, want: false},
+		{name: "nil", err: nil, want: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, isRetriablePostgresError(tt.err))
+		})
+	}
+}
