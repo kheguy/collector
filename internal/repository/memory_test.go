@@ -57,6 +57,47 @@ func TestMemoryStorage_SetAndGet(t *testing.T) {
 	}
 }
 
+func TestMemoryStorage_SetBatch_MixedAndDuplicateMetrics(t *testing.T) {
+	storage := NewMemoryStorage()
+	ctx := context.Background()
+	require.NoError(t, storage.Set("requests", models.Counter, 5, ctx))
+
+	firstGauge, lastGauge := 1.5, 2.5
+	firstDelta, secondDelta := int64(2), int64(3)
+	metrics := []models.Metrics{
+		{ID: "temperature", MType: models.Gauge, Value: &firstGauge},
+		{ID: "requests", MType: models.Counter, Delta: &firstDelta},
+		{ID: "temperature", MType: models.Gauge, Value: &lastGauge},
+		{ID: "requests", MType: models.Counter, Delta: &secondDelta},
+	}
+
+	require.NoError(t, storage.SetBatch(metrics, ctx))
+	got, err := storage.GetAll(ctx)
+
+	require.NoError(t, err)
+	assert.Equal(t, map[string]interface{}{
+		"temperature": 2.5,
+		"requests":    10,
+	}, got)
+}
+
+func TestMemoryStorage_SetBatch_ValidationIsAtomic(t *testing.T) {
+	storage := NewMemoryStorage()
+	ctx := context.Background()
+	gauge := 1.5
+	metrics := []models.Metrics{
+		{ID: "temperature", MType: models.Gauge, Value: &gauge},
+		{ID: "requests", MType: models.Counter},
+	}
+
+	err := storage.SetBatch(metrics, ctx)
+
+	assert.EqualError(t, err, "counter has no delta")
+	got, getErr := storage.GetAll(ctx)
+	require.NoError(t, getErr)
+	assert.Empty(t, got)
+}
+
 func TestMemoryStorage_Get_NotFound(t *testing.T) {
 	storage := NewMemoryStorage()
 

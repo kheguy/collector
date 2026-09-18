@@ -5,6 +5,7 @@ package mocks
 import (
 	context "context"
 
+	models "github.com/kheguy/collector/internal/model"
 	mock "github.com/stretchr/testify/mock"
 )
 
@@ -230,6 +231,53 @@ func (_c *MockStorage_SetAll_Call) Return(_a0 error) *MockStorage_SetAll_Call {
 }
 
 func (_c *MockStorage_SetAll_Call) RunAndReturn(run func(map[string]interface{}, context.Context) error) *MockStorage_SetAll_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// SetBatch provides a mock function with given fields: metrics, ctx
+func (_m *MockStorage) SetBatch(metrics []models.Metrics, ctx context.Context) error {
+	ret := _m.Called(metrics, ctx)
+
+	if len(ret) == 0 {
+		panic("no return value specified for SetBatch")
+	}
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func([]models.Metrics, context.Context) error); ok {
+		r0 = rf(metrics, ctx)
+	} else {
+		r0 = ret.Error(0)
+	}
+
+	return r0
+}
+
+// MockStorage_SetBatch_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'SetBatch'
+type MockStorage_SetBatch_Call struct {
+	*mock.Call
+}
+
+// SetBatch is a helper method to define mock.On call
+//   - metrics []models.Metrics
+//   - ctx context.Context
+func (_e *MockStorage_Expecter) SetBatch(metrics interface{}, ctx interface{}) *MockStorage_SetBatch_Call {
+	return &MockStorage_SetBatch_Call{Call: _e.mock.On("SetBatch", metrics, ctx)}
+}
+
+func (_c *MockStorage_SetBatch_Call) Run(run func(metrics []models.Metrics, ctx context.Context)) *MockStorage_SetBatch_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].([]models.Metrics), args[1].(context.Context))
+	})
+	return _c
+}
+
+func (_c *MockStorage_SetBatch_Call) Return(_a0 error) *MockStorage_SetBatch_Call {
+	_c.Call.Return(_a0)
+	return _c
+}
+
+func (_c *MockStorage_SetBatch_Call) RunAndReturn(run func([]models.Metrics, context.Context) error) *MockStorage_SetBatch_Call {
 	_c.Call.Return(run)
 	return _c
 }

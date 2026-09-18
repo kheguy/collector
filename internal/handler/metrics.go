@@ -14,6 +14,7 @@ type Service interface {
 	GetRawMetric(name string, ctx context.Context) (interface{}, error)
 	GetAllMetrics(ctx context.Context) (map[string]interface{}, error)
 	UpdateMetrics(name string, typeOfValue string, value interface{}, ctx context.Context) error
+	UpdateMetricsBatch(metrics []models.Metrics, ctx context.Context) error
 }
 
 type Renderer interface {
@@ -125,6 +126,22 @@ func (h *MetricsHandler) JSONUpdateHandler(res http.ResponseWriter, req *http.Re
 	}
 	metric = makeMetric(metric.ID, metric.MType, stored)
 	writeJSON(res, http.StatusOK, metric)
+}
+
+func (h *MetricsHandler) JSONBatchUpdateHandler(res http.ResponseWriter, req *http.Request) {
+	var metrics []models.Metrics
+	if err := json.NewDecoder(req.Body).Decode(&metrics); err != nil {
+		http.Error(res, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
+		return
+	}
+
+	if err := h.service.UpdateMetricsBatch(metrics, req.Context()); err != nil {
+		http.Error(res, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
+		return
+	}
+
+	res.Header().Set("Content-Type", "application/json")
+	res.WriteHeader(http.StatusOK)
 }
 
 func (h *MetricsHandler) JSONValueHandler(res http.ResponseWriter, req *http.Request) {

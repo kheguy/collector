@@ -153,6 +153,40 @@ func TestJSONUpdateHandler_GetStoredMetricError(t *testing.T) {
 	assert.Equal(t, http.StatusInternalServerError, w.Code)
 }
 
+func TestJSONBatchUpdateHandler_Success(t *testing.T) {
+	gauge := 12.5
+	delta := int64(3)
+	metrics := []models.Metrics{
+		{ID: "temperature", MType: models.Gauge, Value: &gauge},
+		{ID: "requests", MType: models.Counter, Delta: &delta},
+	}
+	req := httptest.NewRequest(
+		http.MethodPost,
+		"/updates/",
+		strings.NewReader(`[{"id":"temperature","type":"gauge","value":12.5},{"id":"requests","type":"counter","delta":3}]`),
+	)
+	serviceMock := mocks.NewMockService(t)
+	serviceMock.EXPECT().UpdateMetricsBatch(metrics, req.Context()).Return(nil).Once()
+	handler := MakeNewMetricsHandler(serviceMock, mocks.NewMockRenderer(t))
+	w := httptest.NewRecorder()
+
+	handler.JSONBatchUpdateHandler(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+	assert.Equal(t, "application/json", w.Header().Get("Content-Type"))
+}
+
+func TestJSONBatchUpdateHandler_InvalidJSON(t *testing.T) {
+	serviceMock := mocks.NewMockService(t)
+	handler := MakeNewMetricsHandler(serviceMock, mocks.NewMockRenderer(t))
+	req := httptest.NewRequest(http.MethodPost, "/updates/", strings.NewReader(`[{"id":`))
+	w := httptest.NewRecorder()
+
+	handler.JSONBatchUpdateHandler(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+}
+
 func TestJSONValueHandler_Success(t *testing.T) {
 	req := httptest.NewRequest(
 		http.MethodPost,

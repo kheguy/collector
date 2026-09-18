@@ -52,6 +52,41 @@ func (s *DBStorage) Get(name string, ctx context.Context) (interface{}, error) {
 }
 
 func (s *DBStorage) Set(name string, mType string, value interface{}, ctx context.Context) error {
+	return upsertMetric(ctx, s.pool, name, mType, value)
+}
+
+func (s *DBStorage) SetBatch(metrics []models.Metrics, ctx context.Context) error {
+	if len(metrics) == 0 {
+		return nil
+	}
+
+	values := make([]interface{}, len(metrics))
+	for i, metric := range metrics {
+		value, err := batchMetricValue(metric)
+		if err != nil {
+			return err
+		}
+		values[i] = value
+	}
+
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		_ = tx.Rollback(ctx)
+	}()
+
+	for i, metric := range metrics {
+		if err := upsertMetric(ctx, tx, metric.ID, metric.MType, values[i]); err != nil {
+			return err
+		}
+	}
+
+	return tx.Commit(ctx)
+}
+
+func upsertMetric(ctx context.Context, executor commandExecutor, name string, mType string, value interface{}) error {
 	switch mType {
 	case models.Gauge:
 		gauge, ok := value.(float64)
@@ -59,7 +94,7 @@ func (s *DBStorage) Set(name string, mType string, value interface{}, ctx contex
 			return errors.New("invalid gauge value type")
 		}
 
-		_, err := s.pool.Exec(
+		_, err := executor.Exec(
 			ctx,
 			`INSERT INTO metrics (name, mtype, delta, value)
 			 VALUES ($1, $2, NULL, $3)
@@ -82,7 +117,7 @@ func (s *DBStorage) Set(name string, mType string, value interface{}, ctx contex
 			return errors.New("invalid counter value type")
 		}
 
-		_, err := s.pool.Exec(
+		_, err := executor.Exec(
 			ctx,
 			`INSERT INTO metrics (name, mtype, delta, value)
 			 VALUES ($1, $2, $3, NULL)

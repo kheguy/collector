@@ -113,6 +113,9 @@ func main() {
 	r.Post(`/update/{type}/{name}/{value}`, metricsHandler.UpdateHandler)
 	r.Post(`/update`, metricsHandler.JSONUpdateHandler)
 	r.Post(`/update/`, metricsHandler.JSONUpdateHandler)
+	// Меня все вот эти повторы очень смущают
+	r.Post(`/updates`, metricsHandler.JSONBatchUpdateHandler)
+	r.Post(`/updates/`, metricsHandler.JSONBatchUpdateHandler)
 	r.Get(`/value/{type}/{name}`, metricsHandler.ValueHandler)
 	r.Post(`/value`, metricsHandler.JSONValueHandler)
 	r.Post(`/value/`, metricsHandler.JSONValueHandler)

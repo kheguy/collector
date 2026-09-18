@@ -18,6 +18,7 @@ type Storage interface {
 	Get(name string, ctx context.Context) (interface{}, error)
 	GetAll(ctx context.Context) (map[string]interface{}, error)
 	Set(name string, mType string, value interface{}, ctx context.Context) error
+	SetBatch(metrics []models.Metrics, ctx context.Context) error
 	SetAll(data map[string]interface{}, ctx context.Context) error
 }
 
@@ -85,4 +86,8 @@ func (s *MetricsService) UpdateMetrics(name string, typeOfValue string, value in
 	err := s.storage.Set(name, typeOfValue, parsedValue, ctx)
 
 	return err
+}
+
+func (s *MetricsService) UpdateMetricsBatch(metrics []models.Metrics, ctx context.Context) error {
+	return s.storage.SetBatch(metrics, ctx)
 }

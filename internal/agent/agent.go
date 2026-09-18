@@ -59,6 +59,7 @@ func (a *Agent) sendMetrics(ctx context.Context) error {
 		return err
 	}
 
+	batch := make([]models.Metrics, 0, len(metrics))
 	for name, value := range metrics {
 		metric := models.Metrics{ID: name}
 
@@ -74,42 +75,48 @@ func (a *Agent) sendMetrics(ctx context.Context) error {
 			continue
 		}
 
-		body, err := json.Marshal(metric)
-		if err != nil {
-			return err
-		}
-		compressedBody, err := compress(body)
-		if err != nil {
-			return err
-		}
+		batch = append(batch, metric)
+	}
 
-		req, err := http.NewRequestWithContext(
-			ctx,
-			http.MethodPost,
-			fmt.Sprintf("%s/update/", a.url),
-			bytes.NewReader(compressedBody),
-		)
-		if err != nil {
-			return err
-		}
-		req.Header.Set("Content-Type", "application/json")
-		req.Header.Set("Content-Encoding", "gzip")
-		req.Header.Set("Accept", "application/json")
-		req.Header.Set("Accept-Encoding", "gzip")
+	if len(batch) == 0 {
+		return nil
+	}
 
-		res, err := a.httpClient.Do(req)
-		if err != nil {
-			return err
-		}
+	body, err := json.Marshal(batch)
+	if err != nil {
+		return err
+	}
+	compressedBody, err := compress(body)
+	if err != nil {
+		return err
+	}
 
-		if _, err := io.Copy(io.Discard, res.Body); err != nil {
-			res.Body.Close()
-			return err
-		}
+	req, err := http.NewRequestWithContext(
+		ctx,
+		http.MethodPost,
+		fmt.Sprintf("%s/updates/", a.url),
+		bytes.NewReader(compressedBody),
+	)
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Content-Encoding", "gzip")
+	req.Header.Set("Accept", "application/json")
+	req.Header.Set("Accept-Encoding", "gzip")
+
+	res, err := a.httpClient.Do(req)
+	if err != nil {
+		return err
+	}
+
+	if _, err := io.Copy(io.Discard, res.Body); err != nil {
 		res.Body.Close()
-		if res.StatusCode < http.StatusOK || res.StatusCode >= http.StatusMultipleChoices {
-			return fmt.Errorf("server returned status %s", res.Status)
-		}
+		return err
+	}
+	res.Body.Close()
+	if res.StatusCode < http.StatusOK || res.StatusCode >= http.StatusMultipleChoices {
+		return fmt.Errorf("server returned status %s", res.Status)
 	}
 
 	return a.storage.Clear(ctx)

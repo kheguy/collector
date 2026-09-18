@@ -41,6 +41,36 @@ func (s *MemoryStorage) Set(name string, mType string, value interface{}, ctx co
 	return nil
 }
 
+func (s *MemoryStorage) SetBatch(metrics []models.Metrics, ctx context.Context) error {
+	if len(metrics) == 0 {
+		return nil
+	}
+
+	values := make([]interface{}, len(metrics))
+	for i, metric := range metrics {
+		value, err := batchMetricValue(metric)
+		if err != nil {
+			return err
+		}
+		values[i] = value
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	for i, metric := range metrics {
+		switch metric.MType {
+		case models.Gauge:
+			s.data[metric.ID] = values[i].(float64)
+		case models.Counter:
+			current, _ := s.data[metric.ID].(int)
+			s.data[metric.ID] = current + values[i].(int)
+		}
+	}
+
+	return nil
+}
+
 func (s *MemoryStorage) GetAll(ctx context.Context) (map[string]interface{}, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()

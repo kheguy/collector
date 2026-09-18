@@ -1,12 +1,15 @@
 package agent
 
 import (
+	"compress/gzip"
 	"context"
+	"encoding/json"
 	"net/http"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	models "github.com/kheguy/collector/internal/model"
 	"github.com/kheguy/collector/internal/repository"
@@ -202,4 +205,72 @@ func TestAgent_RunCollectsMetrics(t *testing.T) {
 	assert.Greater(t, metrics["PollCount"].(int), 0)
 	assert.Contains(t, metrics, "RandomValue")
 	assert.Contains(t, metrics, "Alloc")
+}
+
+func TestAgent_SendMetricsBatchSuccess(t *testing.T) {
+	ctx := context.Background()
+	storage := repository.NewMemoryStorage()
+	require.NoError(t, storage.Set("requests", models.Counter, 3, ctx))
+	require.NoError(t, storage.Set("temperature", models.Gauge, 7.5, ctx))
+
+	requests := 0
+	var batch []models.Metrics
+	client := http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		requests++
+		assert.Equal(t, http.MethodPost, req.Method)
+		assert.Equal(t, "/updates/", req.URL.Path)
+		assert.Equal(t, "gzip", req.Header.Get("Content-Encoding"))
+		reader, err := gzip.NewReader(req.Body)
+		require.NoError(t, err)
+		defer reader.Close()
+		require.NoError(t, json.NewDecoder(reader).Decode(&batch))
+		return &http.Response{StatusCode: http.StatusOK, Status: "200 OK", Body: http.NoBody}, nil
+	})}
+
+	agent := NewAgent(storage, testAgentURL, client)
+	require.NoError(t, agent.sendMetrics(ctx))
+	assert.Equal(t, 1, requests)
+
+	delta, value := int64(3), 7.5
+	assert.ElementsMatch(t, []models.Metrics{
+		{ID: "requests", MType: models.Counter, Delta: &delta},
+		{ID: "temperature", MType: models.Gauge, Value: &value},
+	}, batch)
+
+	remaining, err := storage.GetAll(ctx)
+	require.NoError(t, err)
+	assert.Empty(t, remaining)
+}
+
+func TestAgent_SendMetricsEmptyBatch(t *testing.T) {
+	requests := 0
+	client := http.Client{Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
+		requests++
+		return &http.Response{StatusCode: http.StatusOK, Body: http.NoBody}, nil
+	})}
+
+	agent := NewAgent(repository.NewMemoryStorage(), testAgentURL, client)
+	require.NoError(t, agent.sendMetrics(context.Background()))
+	assert.Zero(t, requests)
+}
+
+func TestAgent_SendMetricsNon2xxKeepsMetrics(t *testing.T) {
+	ctx := context.Background()
+	storage := repository.NewMemoryStorage()
+	require.NoError(t, storage.Set("temperature", models.Gauge, 7.5, ctx))
+
+	client := http.Client{Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
+		return &http.Response{
+			StatusCode: http.StatusInternalServerError,
+			Status:     "500 Internal Server Error",
+			Body:       http.NoBody,
+		}, nil
+	})}
+
+	agent := NewAgent(storage, testAgentURL, client)
+	assert.Error(t, agent.sendMetrics(ctx))
+
+	remaining, err := storage.Get("temperature", ctx)
+	require.NoError(t, err)
+	assert.Equal(t, 7.5, remaining)
 }
