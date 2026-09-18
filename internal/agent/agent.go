@@ -106,14 +106,22 @@ func (a *Agent) sendMetrics(ctx context.Context) error {
 	requestTemplate.Header.Set("Accept", "application/json")
 	requestTemplate.Header.Set("Accept-Encoding", "gzip")
 
-	var res *http.Response
+	var statusCode int
+	var status string
 	err = retry.Do(
 		ctx,
 		func() error {
 			req := requestTemplate.Clone(ctx)
 			req.Body = io.NopCloser(bytes.NewReader(compressedBody))
-			res, err = a.httpClient.Do(req)
-			return err
+			res, err := a.httpClient.Do(req)
+			if err != nil {
+				return err
+			}
+			defer res.Body.Close()
+
+			statusCode = res.StatusCode
+			status = res.Status
+			return nil
 		},
 		func(error) bool {
 			return ctx.Err() == nil
@@ -123,13 +131,8 @@ func (a *Agent) sendMetrics(ctx context.Context) error {
 		return err
 	}
 
-	if _, err := io.Copy(io.Discard, res.Body); err != nil {
-		res.Body.Close()
-		return err
-	}
-	res.Body.Close()
-	if res.StatusCode < http.StatusOK || res.StatusCode >= http.StatusMultipleChoices {
-		return fmt.Errorf("server returned status %s", res.Status)
+	if statusCode < http.StatusOK || statusCode >= http.StatusMultipleChoices {
+		return fmt.Errorf("server returned status %s", status)
 	}
 
 	return a.storage.Clear(ctx)
