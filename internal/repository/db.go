@@ -33,7 +33,7 @@ func NewDBStorage(p Pool) *DBStorage {
 	}
 }
 
-func (s *DBStorage) Get(name string, ctx context.Context) (interface{}, error) {
+func (s *DBStorage) Get(ctx context.Context, name string) (interface{}, error) {
 	var result interface{}
 	err := retry.Do(ctx, func() error {
 		var mType string
@@ -64,13 +64,13 @@ func (s *DBStorage) Get(name string, ctx context.Context) (interface{}, error) {
 	return result, err
 }
 
-func (s *DBStorage) Set(name string, mType string, value interface{}, ctx context.Context) error {
+func (s *DBStorage) Set(ctx context.Context, name string, mType string, value interface{}) error {
 	return retry.Do(ctx, func() error {
 		return upsertMetric(ctx, s.pool, name, mType, value)
 	}, isRetriablePostgresError)
 }
 
-func (s *DBStorage) SetBatch(metrics []models.Metrics, ctx context.Context) error {
+func (s *DBStorage) SetBatch(ctx context.Context, metrics []models.Metrics) error {
 	if len(metrics) == 0 {
 		return nil
 	}
@@ -85,11 +85,11 @@ func (s *DBStorage) SetBatch(metrics []models.Metrics, ctx context.Context) erro
 	}
 
 	return retry.Do(ctx, func() error {
-		return s.setBatchOnce(metrics, values, ctx)
+		return s.setBatchOnce(ctx, metrics, values)
 	}, isRetriablePostgresError)
 }
 
-func (s *DBStorage) setBatchOnce(metrics []models.Metrics, values []interface{}, ctx context.Context) error {
+func (s *DBStorage) setBatchOnce(ctx context.Context, metrics []models.Metrics, values []interface{}) error {
 	tx, err := s.pool.Begin(ctx)
 	if err != nil {
 		return err
@@ -98,65 +98,71 @@ func (s *DBStorage) setBatchOnce(metrics []models.Metrics, values []interface{},
 		_ = tx.Rollback(ctx)
 	}()
 
+	batch := &pgx.Batch{}
 	for i, metric := range metrics {
-		if err := upsertMetric(ctx, tx, metric.ID, metric.MType, values[i]); err != nil {
+		query, args, err := upsertMetricQuery(metric.ID, metric.MType, values[i])
+		if err != nil {
 			return err
 		}
+		batch.Queue(query, args...)
+	}
+
+	results := tx.SendBatch(ctx, batch)
+	if err := results.Close(); err != nil {
+		return err
 	}
 
 	return tx.Commit(ctx)
 }
 
 func upsertMetric(ctx context.Context, executor commandExecutor, name string, mType string, value interface{}) error {
+	query, args, err := upsertMetricQuery(name, mType, value)
+	if err != nil {
+		return err
+	}
+
+	_, err = executor.Exec(ctx, query, args...)
+	return err
+}
+
+func upsertMetricQuery(name string, mType string, value interface{}) (string, []interface{}, error) {
 	switch mType {
 	case models.Gauge:
 		gauge, ok := value.(float64)
 		if !ok {
-			return errors.New("invalid gauge value type")
+			return "", nil, errors.New("invalid gauge value type")
 		}
 
-		_, err := executor.Exec(
-			ctx,
-			`INSERT INTO metrics (name, mtype, delta, value)
+		return `INSERT INTO metrics (name, mtype, delta, value)
 			 VALUES ($1, $2, NULL, $3)
 			 ON CONFLICT (name) DO UPDATE
 			 SET mtype = EXCLUDED.mtype,
 			     delta = NULL,
-			     value = EXCLUDED.value`,
-			name,
-			mType,
-			gauge,
-		)
-		if err != nil {
-			return err
-		}
-		return nil
+			     value = EXCLUDED.value`, []interface{}{
+				name,
+				mType,
+				gauge,
+			}, nil
 
 	case models.Counter:
 		counter, ok := value.(int)
 		if !ok {
-			return errors.New("invalid counter value type")
+			return "", nil, errors.New("invalid counter value type")
 		}
 
-		_, err := executor.Exec(
-			ctx,
-			`INSERT INTO metrics (name, mtype, delta, value)
+		return `INSERT INTO metrics (name, mtype, delta, value)
 			 VALUES ($1, $2, $3, NULL)
 			 ON CONFLICT (name) DO UPDATE
 			 SET mtype = EXCLUDED.mtype,
 			     delta = COALESCE(metrics.delta, 0) + EXCLUDED.delta,
-			     value = NULL`,
-			name,
-			mType,
-			int64(counter),
-		)
-		if err != nil {
-			return err
-		}
-		return nil
+			     value = NULL`, []interface{}{
+				name,
+				mType,
+				int64(counter),
+			}, nil
 
 	default:
-		return errors.New("unknown metric type")
+		return "", nil, errors.New("unknown metric type")
 	}
 }
 
@@ -203,13 +209,13 @@ func (s *DBStorage) getAllOnce(ctx context.Context) (map[string]interface{}, err
 	return result, nil
 }
 
-func (s *DBStorage) SetAll(data map[string]interface{}, ctx context.Context) error {
+func (s *DBStorage) SetAll(ctx context.Context, data map[string]interface{}) error {
 	return retry.Do(ctx, func() error {
-		return s.setAllOnce(data, ctx)
+		return s.setAllOnce(ctx, data)
 	}, isRetriablePostgresError)
 }
 
-func (s *DBStorage) setAllOnce(data map[string]interface{}, ctx context.Context) error {
+func (s *DBStorage) setAllOnce(ctx context.Context, data map[string]interface{}) error {
 	tx, err := s.pool.Begin(ctx)
 	if err != nil {
 		return err
@@ -248,8 +254,8 @@ func isRetriablePostgresError(err error) bool {
 	}
 
 	var pgErr *pgconn.PgError
-	if errors.As(err, &pgErr) && strings.HasPrefix(pgErr.Code, "08") {
-		return true
+	if errors.As(err, &pgErr) {
+		return strings.HasPrefix(pgErr.Code, "08") || strings.HasPrefix(pgErr.Code, "40")
 	}
 
 	var connectErr *pgconn.ConnectError

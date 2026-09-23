@@ -1,6 +1,7 @@
 package repository
 
 import (
+	"context"
 	"encoding/json"
 	"os"
 
@@ -9,6 +10,10 @@ import (
 
 type FileProcessor struct {
 	path string
+}
+
+func (f *FileProcessor) Ping(context.Context) error {
+	return nil
 }
 
 func NewFileProcessor(p string) *FileProcessor {

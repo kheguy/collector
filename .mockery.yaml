@@ -10,7 +10,7 @@ packages:
     interfaces:
       Service:
       Renderer:
-      Pool:
+      Pinger:
   github.com/kheguy/collector/internal/service:
     interfaces:
       Storage:

@@ -2,27 +2,29 @@ package handler
 
 import (
 	"context"
+	"log"
 	"net/http"
 )
 
-type Pool interface {
+type Pinger interface {
 	Ping(context.Context) error
 }
 
 type HealthHandler struct {
-	pool Pool
+	pinger Pinger
 }
 
-func MakeNewHealthHandler(p Pool) *HealthHandler {
+func MakeNewHealthHandler(p Pinger) *HealthHandler {
 	return &HealthHandler{
-		pool: p,
+		pinger: p,
 	}
 }
 
 func (h *HealthHandler) PingHandler(res http.ResponseWriter, req *http.Request) {
-	err := h.pool.Ping(req.Context())
+	err := h.pinger.Ping(req.Context())
 	if err != nil {
-		http.Error(res, err.Error(), http.StatusInternalServerError)
+		log.Printf("Health check error: %v", err)
+		http.Error(res, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 		return
 	}
 

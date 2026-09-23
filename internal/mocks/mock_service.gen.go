@@ -80,9 +80,9 @@ func (_c *MockService_GetAllMetrics_Call) RunAndReturn(run func(context.Context)
 	return _c
 }
 
-// GetMetric provides a mock function with given fields: name, ctx
-func (_m *MockService) GetMetric(name string, ctx context.Context) (string, error) {
-	ret := _m.Called(name, ctx)
+// GetMetric provides a mock function with given fields: ctx, name
+func (_m *MockService) GetMetric(ctx context.Context, name string) (string, error) {
+	ret := _m.Called(ctx, name)
 
 	if len(ret) == 0 {
 		panic("no return value specified for GetMetric")
@@ -90,17 +90,17 @@ func (_m *MockService) GetMetric(name string, ctx context.Context) (string, erro
 
 	var r0 string
 	var r1 error
-	if rf, ok := ret.Get(0).(func(string, context.Context) (string, error)); ok {
-		return rf(name, ctx)
+	if rf, ok := ret.Get(0).(func(context.Context, string) (string, error)); ok {
+		return rf(ctx, name)
 	}
-	if rf, ok := ret.Get(0).(func(string, context.Context) string); ok {
-		r0 = rf(name, ctx)
+	if rf, ok := ret.Get(0).(func(context.Context, string) string); ok {
+		r0 = rf(ctx, name)
 	} else {
 		r0 = ret.Get(0).(string)
 	}
 
-	if rf, ok := ret.Get(1).(func(string, context.Context) error); ok {
-		r1 = rf(name, ctx)
+	if rf, ok := ret.Get(1).(func(context.Context, string) error); ok {
+		r1 = rf(ctx, name)
 	} else {
 		r1 = ret.Error(1)
 	}
@@ -114,15 +114,15 @@ type MockService_GetMetric_Call struct {
 }
 
 // GetMetric is a helper method to define mock.On call
-//   - name string
 //   - ctx context.Context
-func (_e *MockService_Expecter) GetMetric(name interface{}, ctx interface{}) *MockService_GetMetric_Call {
-	return &MockService_GetMetric_Call{Call: _e.mock.On("GetMetric", name, ctx)}
+//   - name string
+func (_e *MockService_Expecter) GetMetric(ctx interface{}, name interface{}) *MockService_GetMetric_Call {
+	return &MockService_GetMetric_Call{Call: _e.mock.On("GetMetric", ctx, name)}
 }
 
-func (_c *MockService_GetMetric_Call) Run(run func(name string, ctx context.Context)) *MockService_GetMetric_Call {
+func (_c *MockService_GetMetric_Call) Run(run func(ctx context.Context, name string)) *MockService_GetMetric_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(string), args[1].(context.Context))
+		run(args[0].(context.Context), args[1].(string))
 	})
 	return _c
 }
@@ -132,14 +132,14 @@ func (_c *MockService_GetMetric_Call) Return(_a0 string, _a1 error) *MockService
 	return _c
 }
 
-func (_c *MockService_GetMetric_Call) RunAndReturn(run func(string, context.Context) (string, error)) *MockService_GetMetric_Call {
+func (_c *MockService_GetMetric_Call) RunAndReturn(run func(context.Context, string) (string, error)) *MockService_GetMetric_Call {
 	_c.Call.Return(run)
 	return _c
 }
 
-// GetRawMetric provides a mock function with given fields: name, ctx
-func (_m *MockService) GetRawMetric(name string, ctx context.Context) (interface{}, error) {
-	ret := _m.Called(name, ctx)
+// GetRawMetric provides a mock function with given fields: ctx, name
+func (_m *MockService) GetRawMetric(ctx context.Context, name string) (interface{}, error) {
+	ret := _m.Called(ctx, name)
 
 	if len(ret) == 0 {
 		panic("no return value specified for GetRawMetric")
@@ -147,19 +147,19 @@ func (_m *MockService) GetRawMetric(name string, ctx context.Context) (interface
 
 	var r0 interface{}
 	var r1 error
-	if rf, ok := ret.Get(0).(func(string, context.Context) (interface{}, error)); ok {
-		return rf(name, ctx)
+	if rf, ok := ret.Get(0).(func(context.Context, string) (interface{}, error)); ok {
+		return rf(ctx, name)
 	}
-	if rf, ok := ret.Get(0).(func(string, context.Context) interface{}); ok {
-		r0 = rf(name, ctx)
+	if rf, ok := ret.Get(0).(func(context.Context, string) interface{}); ok {
+		r0 = rf(ctx, name)
 	} else {
 		if ret.Get(0) != nil {
 			r0 = ret.Get(0).(interface{})
 		}
 	}
 
-	if rf, ok := ret.Get(1).(func(string, context.Context) error); ok {
-		r1 = rf(name, ctx)
+	if rf, ok := ret.Get(1).(func(context.Context, string) error); ok {
+		r1 = rf(ctx, name)
 	} else {
 		r1 = ret.Error(1)
 	}
@@ -173,15 +173,15 @@ type MockService_GetRawMetric_Call struct {
 }
 
 // GetRawMetric is a helper method to define mock.On call
-//   - name string
 //   - ctx context.Context
-func (_e *MockService_Expecter) GetRawMetric(name interface{}, ctx interface{}) *MockService_GetRawMetric_Call {
-	return &MockService_GetRawMetric_Call{Call: _e.mock.On("GetRawMetric", name, ctx)}
+//   - name string
+func (_e *MockService_Expecter) GetRawMetric(ctx interface{}, name interface{}) *MockService_GetRawMetric_Call {
+	return &MockService_GetRawMetric_Call{Call: _e.mock.On("GetRawMetric", ctx, name)}
 }
 
-func (_c *MockService_GetRawMetric_Call) Run(run func(name string, ctx context.Context)) *MockService_GetRawMetric_Call {
+func (_c *MockService_GetRawMetric_Call) Run(run func(ctx context.Context, name string)) *MockService_GetRawMetric_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(string), args[1].(context.Context))
+		run(args[0].(context.Context), args[1].(string))
 	})
 	return _c
 }
@@ -191,22 +191,22 @@ func (_c *MockService_GetRawMetric_Call) Return(_a0 interface{}, _a1 error) *Moc
 	return _c
 }
 
-func (_c *MockService_GetRawMetric_Call) RunAndReturn(run func(string, context.Context) (interface{}, error)) *MockService_GetRawMetric_Call {
+func (_c *MockService_GetRawMetric_Call) RunAndReturn(run func(context.Context, string) (interface{}, error)) *MockService_GetRawMetric_Call {
 	_c.Call.Return(run)
 	return _c
 }
 
-// UpdateMetrics provides a mock function with given fields: name, typeOfValue, value, ctx
-func (_m *MockService) UpdateMetrics(name string, typeOfValue string, value interface{}, ctx context.Context) error {
-	ret := _m.Called(name, typeOfValue, value, ctx)
+// UpdateMetrics provides a mock function with given fields: ctx, name, typeOfValue, value
+func (_m *MockService) UpdateMetrics(ctx context.Context, name string, typeOfValue string, value interface{}) error {
+	ret := _m.Called(ctx, name, typeOfValue, value)
 
 	if len(ret) == 0 {
 		panic("no return value specified for UpdateMetrics")
 	}
 
 	var r0 error
-	if rf, ok := ret.Get(0).(func(string, string, interface{}, context.Context) error); ok {
-		r0 = rf(name, typeOfValue, value, ctx)
+	if rf, ok := ret.Get(0).(func(context.Context, string, string, interface{}) error); ok {
+		r0 = rf(ctx, name, typeOfValue, value)
 	} else {
 		r0 = ret.Error(0)
 	}
@@ -220,17 +220,17 @@ type MockService_UpdateMetrics_Call struct {
 }
 
 // UpdateMetrics is a helper method to define mock.On call
+//   - ctx context.Context
 //   - name string
 //   - typeOfValue string
 //   - value interface{}
-//   - ctx context.Context
-func (_e *MockService_Expecter) UpdateMetrics(name interface{}, typeOfValue interface{}, value interface{}, ctx interface{}) *MockService_UpdateMetrics_Call {
-	return &MockService_UpdateMetrics_Call{Call: _e.mock.On("UpdateMetrics", name, typeOfValue, value, ctx)}
+func (_e *MockService_Expecter) UpdateMetrics(ctx interface{}, name interface{}, typeOfValue interface{}, value interface{}) *MockService_UpdateMetrics_Call {
+	return &MockService_UpdateMetrics_Call{Call: _e.mock.On("UpdateMetrics", ctx, name, typeOfValue, value)}
 }
 
-func (_c *MockService_UpdateMetrics_Call) Run(run func(name string, typeOfValue string, value interface{}, ctx context.Context)) *MockService_UpdateMetrics_Call {
+func (_c *MockService_UpdateMetrics_Call) Run(run func(ctx context.Context, name string, typeOfValue string, value interface{})) *MockService_UpdateMetrics_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(string), args[1].(string), args[2].(interface{}), args[3].(context.Context))
+		run(args[0].(context.Context), args[1].(string), args[2].(string), args[3].(interface{}))
 	})
 	return _c
 }
@@ -240,22 +240,22 @@ func (_c *MockService_UpdateMetrics_Call) Return(_a0 error) *MockService_UpdateM
 	return _c
 }
 
-func (_c *MockService_UpdateMetrics_Call) RunAndReturn(run func(string, string, interface{}, context.Context) error) *MockService_UpdateMetrics_Call {
+func (_c *MockService_UpdateMetrics_Call) RunAndReturn(run func(context.Context, string, string, interface{}) error) *MockService_UpdateMetrics_Call {
 	_c.Call.Return(run)
 	return _c
 }
 
-// UpdateMetricsBatch provides a mock function with given fields: metrics, ctx
-func (_m *MockService) UpdateMetricsBatch(metrics []models.Metrics, ctx context.Context) error {
-	ret := _m.Called(metrics, ctx)
+// UpdateMetricsBatch provides a mock function with given fields: ctx, metrics
+func (_m *MockService) UpdateMetricsBatch(ctx context.Context, metrics []models.Metrics) error {
+	ret := _m.Called(ctx, metrics)
 
 	if len(ret) == 0 {
 		panic("no return value specified for UpdateMetricsBatch")
 	}
 
 	var r0 error
-	if rf, ok := ret.Get(0).(func([]models.Metrics, context.Context) error); ok {
-		r0 = rf(metrics, ctx)
+	if rf, ok := ret.Get(0).(func(context.Context, []models.Metrics) error); ok {
+		r0 = rf(ctx, metrics)
 	} else {
 		r0 = ret.Error(0)
 	}
@@ -269,15 +269,15 @@ type MockService_UpdateMetricsBatch_Call struct {
 }
 
 // UpdateMetricsBatch is a helper method to define mock.On call
-//   - metrics []models.Metrics
 //   - ctx context.Context
-func (_e *MockService_Expecter) UpdateMetricsBatch(metrics interface{}, ctx interface{}) *MockService_UpdateMetricsBatch_Call {
-	return &MockService_UpdateMetricsBatch_Call{Call: _e.mock.On("UpdateMetricsBatch", metrics, ctx)}
+//   - metrics []models.Metrics
+func (_e *MockService_Expecter) UpdateMetricsBatch(ctx interface{}, metrics interface{}) *MockService_UpdateMetricsBatch_Call {
+	return &MockService_UpdateMetricsBatch_Call{Call: _e.mock.On("UpdateMetricsBatch", ctx, metrics)}
 }
 
-func (_c *MockService_UpdateMetricsBatch_Call) Run(run func(metrics []models.Metrics, ctx context.Context)) *MockService_UpdateMetricsBatch_Call {
+func (_c *MockService_UpdateMetricsBatch_Call) Run(run func(ctx context.Context, metrics []models.Metrics)) *MockService_UpdateMetricsBatch_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].([]models.Metrics), args[1].(context.Context))
+		run(args[0].(context.Context), args[1].([]models.Metrics))
 	})
 	return _c
 }
@@ -287,7 +287,7 @@ func (_c *MockService_UpdateMetricsBatch_Call) Return(_a0 error) *MockService_Up
 	return _c
 }
 
-func (_c *MockService_UpdateMetricsBatch_Call) RunAndReturn(run func([]models.Metrics, context.Context) error) *MockService_UpdateMetricsBatch_Call {
+func (_c *MockService_UpdateMetricsBatch_Call) RunAndReturn(run func(context.Context, []models.Metrics) error) *MockService_UpdateMetricsBatch_Call {
 	_c.Call.Return(run)
 	return _c
 }

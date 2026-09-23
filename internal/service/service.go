@@ -3,23 +3,25 @@ package service
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strconv"
 
 	models "github.com/kheguy/collector/internal/model"
 )
 
 var (
-	errParseFloat  = errors.New("can't parse gauge string to float64")
-	errParseInt    = errors.New("can't parse counter string to int")
-	errUnknownType = errors.New("unknown metric type")
+	ErrInvalidMetric = errors.New("invalid metric")
+	errParseFloat    = errors.New("can't parse gauge string to float64")
+	errParseInt      = errors.New("can't parse counter string to int")
+	errUnknownType   = errors.New("unknown metric type")
 )
 
 type Storage interface {
-	Get(name string, ctx context.Context) (interface{}, error)
+	Get(ctx context.Context, name string) (interface{}, error)
 	GetAll(ctx context.Context) (map[string]interface{}, error)
-	Set(name string, mType string, value interface{}, ctx context.Context) error
-	SetBatch(metrics []models.Metrics, ctx context.Context) error
-	SetAll(data map[string]interface{}, ctx context.Context) error
+	Set(ctx context.Context, name string, mType string, value interface{}) error
+	SetBatch(ctx context.Context, metrics []models.Metrics) error
+	SetAll(ctx context.Context, data map[string]interface{}) error
 }
 
 type MetricsService struct {
@@ -32,8 +34,8 @@ func MakeNewMetricsService(s Storage) *MetricsService {
 	}
 }
 
-func (s *MetricsService) GetMetric(name string, ctx context.Context) (string, error) {
-	value, err := s.storage.Get(name, ctx)
+func (s *MetricsService) GetMetric(ctx context.Context, name string) (string, error) {
+	value, err := s.storage.Get(ctx, name)
 
 	if err != nil {
 		return "", err
@@ -49,45 +51,67 @@ func (s *MetricsService) GetMetric(name string, ctx context.Context) (string, er
 	}
 }
 
-func (s *MetricsService) GetRawMetric(name string, ctx context.Context) (interface{}, error) {
-	return s.storage.Get(name, ctx)
+func (s *MetricsService) GetRawMetric(ctx context.Context, name string) (interface{}, error) {
+	return s.storage.Get(ctx, name)
 }
 
 func (s *MetricsService) GetAllMetrics(ctx context.Context) (map[string]interface{}, error) {
 	return s.storage.GetAll(ctx)
 }
 
-func (s *MetricsService) UpdateMetrics(name string, typeOfValue string, value interface{}, ctx context.Context) error {
+func (s *MetricsService) UpdateMetrics(ctx context.Context, name string, typeOfValue string, value interface{}) error {
 
 	var parsedValue interface{}
 
 	switch typeOfValue {
 	case models.Gauge:
-		if str, ok := value.(string); ok {
-			if val, err := strconv.ParseFloat(str, 64); err == nil {
-				parsedValue = val
-			} else {
-				return errParseFloat
-			}
+		str, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("%w: %w", ErrInvalidMetric, errParseFloat)
 		}
+		val, err := strconv.ParseFloat(str, 64)
+		if err != nil {
+			return fmt.Errorf("%w: %w", ErrInvalidMetric, errParseFloat)
+		}
+		parsedValue = val
 
 	case models.Counter:
-		if str, ok := value.(string); ok {
-			if val, err := strconv.Atoi(str); err == nil {
-				parsedValue = val
-			} else {
-				return errParseInt
-			}
+		str, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("%w: %w", ErrInvalidMetric, errParseInt)
 		}
+		val, err := strconv.Atoi(str)
+		if err != nil {
+			return fmt.Errorf("%w: %w", ErrInvalidMetric, errParseInt)
+		}
+		parsedValue = val
 	default:
-		return errUnknownType
+		return fmt.Errorf("%w: %w", ErrInvalidMetric, errUnknownType)
 	}
 
-	err := s.storage.Set(name, typeOfValue, parsedValue, ctx)
+	err := s.storage.Set(ctx, name, typeOfValue, parsedValue)
 
 	return err
 }
 
-func (s *MetricsService) UpdateMetricsBatch(metrics []models.Metrics, ctx context.Context) error {
-	return s.storage.SetBatch(metrics, ctx)
+func (s *MetricsService) UpdateMetricsBatch(ctx context.Context, metrics []models.Metrics) error {
+	for _, metric := range metrics {
+		if metric.ID == "" {
+			return fmt.Errorf("%w: metric name is empty", ErrInvalidMetric)
+		}
+		switch metric.MType {
+		case models.Gauge:
+			if metric.Value == nil {
+				return fmt.Errorf("%w: gauge has no value", ErrInvalidMetric)
+			}
+		case models.Counter:
+			if metric.Delta == nil {
+				return fmt.Errorf("%w: counter has no delta", ErrInvalidMetric)
+			}
+		default:
+			return fmt.Errorf("%w: %w", ErrInvalidMetric, errUnknownType)
+		}
+	}
+
+	return s.storage.SetBatch(ctx, metrics)
 }

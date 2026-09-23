@@ -6,7 +6,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"log"
 	"math/rand/v2"
 	"net/http"
@@ -15,20 +14,19 @@ import (
 
 	models "github.com/kheguy/collector/internal/model"
 	"github.com/kheguy/collector/internal/repository"
-	"github.com/kheguy/collector/internal/retry"
 )
 
 type Agent struct {
 	storage    *repository.MemoryStorage
 	url        string
-	httpClient http.Client
+	httpClient HTTPClient
 }
 
 func NewAgent(storage *repository.MemoryStorage, url string, httpClient http.Client) *Agent {
 	return &Agent{
 		storage:    storage,
 		url:        url,
-		httpClient: httpClient,
+		httpClient: NewRetryClient(&httpClient),
 	}
 }
 
@@ -92,7 +90,7 @@ func (a *Agent) sendMetrics(ctx context.Context) error {
 		return err
 	}
 
-	requestTemplate, err := http.NewRequestWithContext(
+	req, err := http.NewRequestWithContext(
 		ctx,
 		http.MethodPost,
 		fmt.Sprintf("%s/updates/", a.url),
@@ -101,38 +99,19 @@ func (a *Agent) sendMetrics(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	requestTemplate.Header.Set("Content-Type", "application/json")
-	requestTemplate.Header.Set("Content-Encoding", "gzip")
-	requestTemplate.Header.Set("Accept", "application/json")
-	requestTemplate.Header.Set("Accept-Encoding", "gzip")
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Content-Encoding", "gzip")
+	req.Header.Set("Accept", "application/json")
+	req.Header.Set("Accept-Encoding", "gzip")
 
-	var statusCode int
-	var status string
-	err = retry.Do(
-		ctx,
-		func() error {
-			req := requestTemplate.Clone(ctx)
-			req.Body = io.NopCloser(bytes.NewReader(compressedBody))
-			res, err := a.httpClient.Do(req)
-			if err != nil {
-				return err
-			}
-			defer res.Body.Close()
-
-			statusCode = res.StatusCode
-			status = res.Status
-			return nil
-		},
-		func(error) bool {
-			return ctx.Err() == nil
-		},
-	)
+	res, err := a.httpClient.Do(req)
 	if err != nil {
 		return err
 	}
+	defer res.Body.Close()
 
-	if statusCode < http.StatusOK || statusCode >= http.StatusMultipleChoices {
-		return fmt.Errorf("server returned status %s", status)
+	if res.StatusCode < http.StatusOK || res.StatusCode >= http.StatusMultipleChoices {
+		return fmt.Errorf("server returned status %s", res.Status)
 	}
 
 	return a.storage.Clear(ctx)
@@ -158,7 +137,7 @@ func (a *Agent) collectMetrics(ctx context.Context) error {
 		return err
 	}
 
-	pollCount, err := a.storage.Get("PollCount", ctx)
+	pollCount, err := a.storage.Get(ctx, "PollCount")
 	if err != nil {
 		return err
 	}
@@ -201,7 +180,7 @@ func (a *Agent) collectRuntimeMetrics(ctx context.Context) error {
 	}
 
 	for name, value := range metrics {
-		if err := a.storage.Set(name, models.Gauge, value, ctx); err != nil {
+		if err := a.storage.Set(ctx, name, models.Gauge, value); err != nil {
 			return err
 		}
 	}
@@ -210,10 +189,10 @@ func (a *Agent) collectRuntimeMetrics(ctx context.Context) error {
 }
 
 func (a *Agent) collectCustomMetrics(ctx context.Context) error {
-	if err := a.storage.Set("PollCount", models.Counter, 1, ctx); err != nil {
+	if err := a.storage.Set(ctx, "PollCount", models.Counter, 1); err != nil {
 		return err
 	}
 
 	randomValue := rand.Float64() * 100
-	return a.storage.Set("RandomValue", models.Gauge, randomValue, ctx)
+	return a.storage.Set(ctx, "RandomValue", models.Gauge, randomValue)
 }

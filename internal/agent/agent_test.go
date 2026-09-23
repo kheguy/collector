@@ -101,7 +101,7 @@ func TestAgent_CollectCustomMetrics(t *testing.T) {
 	storage := repository.NewMemoryStorage()
 	ctx := context.Background()
 
-	err := storage.Set("PollCount", models.Counter, 5, ctx)
+	err := storage.Set(ctx, "PollCount", models.Counter, 5)
 	assert.NoError(t, err)
 
 	agent := NewAgent(storage, testAgentURL, testHTTPClient())
@@ -109,12 +109,12 @@ func TestAgent_CollectCustomMetrics(t *testing.T) {
 	err = agent.collectCustomMetrics(ctx)
 	assert.NoError(t, err)
 
-	pollCount, err := storage.Get("PollCount", ctx)
+	pollCount, err := storage.Get(ctx, "PollCount")
 	assert.NoError(t, err)
 	assert.NotNil(t, pollCount)
 	assert.Equal(t, 6, pollCount)
 
-	randomValue, err := storage.Get("RandomValue", ctx)
+	randomValue, err := storage.Get(ctx, "RandomValue")
 	assert.NoError(t, err)
 	assert.NotNil(t, randomValue)
 }
@@ -129,7 +129,7 @@ func TestAgent_CollectCustomMetrics_WithNoExistingPollCount(t *testing.T) {
 	err := agent.collectCustomMetrics(ctx)
 	assert.NoError(t, err)
 
-	pollCount, err := storage.Get("PollCount", ctx)
+	pollCount, err := storage.Get(ctx, "PollCount")
 	assert.NoError(t, err)
 	assert.NotNil(t, pollCount)
 	assert.Equal(t, 1, pollCount.(int))
@@ -148,12 +148,12 @@ func TestAgent_CollectMetrics(t *testing.T) {
 	assert.NoError(t, err)
 	assert.NotEmpty(t, metrics)
 
-	pollCount, err := storage.Get("PollCount", ctx)
+	pollCount, err := storage.Get(ctx, "PollCount")
 	assert.NoError(t, err)
 	assert.NotNil(t, pollCount)
 	assert.Equal(t, 1, pollCount.(int))
 
-	randomValue, err := storage.Get("RandomValue", ctx)
+	randomValue, err := storage.Get(ctx, "RandomValue")
 	assert.NoError(t, err)
 	assert.NotNil(t, randomValue)
 
@@ -210,8 +210,8 @@ func TestAgent_RunCollectsMetrics(t *testing.T) {
 func TestAgent_SendMetricsBatchSuccess(t *testing.T) {
 	ctx := context.Background()
 	storage := repository.NewMemoryStorage()
-	require.NoError(t, storage.Set("requests", models.Counter, 3, ctx))
-	require.NoError(t, storage.Set("temperature", models.Gauge, 7.5, ctx))
+	require.NoError(t, storage.Set(ctx, "requests", models.Counter, 3))
+	require.NoError(t, storage.Set(ctx, "temperature", models.Gauge, 7.5))
 
 	requests := 0
 	var batch []models.Metrics
@@ -257,7 +257,7 @@ func TestAgent_SendMetricsEmptyBatch(t *testing.T) {
 func TestAgent_SendMetricsNon2xxKeepsMetrics(t *testing.T) {
 	ctx := context.Background()
 	storage := repository.NewMemoryStorage()
-	require.NoError(t, storage.Set("temperature", models.Gauge, 7.5, ctx))
+	require.NoError(t, storage.Set(ctx, "temperature", models.Gauge, 7.5))
 
 	client := http.Client{Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
 		return &http.Response{
@@ -270,7 +270,7 @@ func TestAgent_SendMetricsNon2xxKeepsMetrics(t *testing.T) {
 	agent := NewAgent(storage, testAgentURL, client)
 	assert.Error(t, agent.sendMetrics(ctx))
 
-	remaining, err := storage.Get("temperature", ctx)
+	remaining, err := storage.Get(ctx, "temperature")
 	require.NoError(t, err)
 	assert.Equal(t, 7.5, remaining)
 }

@@ -22,9 +22,9 @@ func (_m *MockStorage) EXPECT() *MockStorage_Expecter {
 	return &MockStorage_Expecter{mock: &_m.Mock}
 }
 
-// Get provides a mock function with given fields: name, ctx
-func (_m *MockStorage) Get(name string, ctx context.Context) (interface{}, error) {
-	ret := _m.Called(name, ctx)
+// Get provides a mock function with given fields: ctx, name
+func (_m *MockStorage) Get(ctx context.Context, name string) (interface{}, error) {
+	ret := _m.Called(ctx, name)
 
 	if len(ret) == 0 {
 		panic("no return value specified for Get")
@@ -32,19 +32,19 @@ func (_m *MockStorage) Get(name string, ctx context.Context) (interface{}, error
 
 	var r0 interface{}
 	var r1 error
-	if rf, ok := ret.Get(0).(func(string, context.Context) (interface{}, error)); ok {
-		return rf(name, ctx)
+	if rf, ok := ret.Get(0).(func(context.Context, string) (interface{}, error)); ok {
+		return rf(ctx, name)
 	}
-	if rf, ok := ret.Get(0).(func(string, context.Context) interface{}); ok {
-		r0 = rf(name, ctx)
+	if rf, ok := ret.Get(0).(func(context.Context, string) interface{}); ok {
+		r0 = rf(ctx, name)
 	} else {
 		if ret.Get(0) != nil {
 			r0 = ret.Get(0).(interface{})
 		}
 	}
 
-	if rf, ok := ret.Get(1).(func(string, context.Context) error); ok {
-		r1 = rf(name, ctx)
+	if rf, ok := ret.Get(1).(func(context.Context, string) error); ok {
+		r1 = rf(ctx, name)
 	} else {
 		r1 = ret.Error(1)
 	}
@@ -58,15 +58,15 @@ type MockStorage_Get_Call struct {
 }
 
 // Get is a helper method to define mock.On call
-//   - name string
 //   - ctx context.Context
-func (_e *MockStorage_Expecter) Get(name interface{}, ctx interface{}) *MockStorage_Get_Call {
-	return &MockStorage_Get_Call{Call: _e.mock.On("Get", name, ctx)}
+//   - name string
+func (_e *MockStorage_Expecter) Get(ctx interface{}, name interface{}) *MockStorage_Get_Call {
+	return &MockStorage_Get_Call{Call: _e.mock.On("Get", ctx, name)}
 }
 
-func (_c *MockStorage_Get_Call) Run(run func(name string, ctx context.Context)) *MockStorage_Get_Call {
+func (_c *MockStorage_Get_Call) Run(run func(ctx context.Context, name string)) *MockStorage_Get_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(string), args[1].(context.Context))
+		run(args[0].(context.Context), args[1].(string))
 	})
 	return _c
 }
@@ -76,7 +76,7 @@ func (_c *MockStorage_Get_Call) Return(_a0 interface{}, _a1 error) *MockStorage_
 	return _c
 }
 
-func (_c *MockStorage_Get_Call) RunAndReturn(run func(string, context.Context) (interface{}, error)) *MockStorage_Get_Call {
+func (_c *MockStorage_Get_Call) RunAndReturn(run func(context.Context, string) (interface{}, error)) *MockStorage_Get_Call {
 	_c.Call.Return(run)
 	return _c
 }
@@ -139,17 +139,17 @@ func (_c *MockStorage_GetAll_Call) RunAndReturn(run func(context.Context) (map[s
 	return _c
 }
 
-// Set provides a mock function with given fields: name, mType, value, ctx
-func (_m *MockStorage) Set(name string, mType string, value interface{}, ctx context.Context) error {
-	ret := _m.Called(name, mType, value, ctx)
+// Set provides a mock function with given fields: ctx, name, mType, value
+func (_m *MockStorage) Set(ctx context.Context, name string, mType string, value interface{}) error {
+	ret := _m.Called(ctx, name, mType, value)
 
 	if len(ret) == 0 {
 		panic("no return value specified for Set")
 	}
 
 	var r0 error
-	if rf, ok := ret.Get(0).(func(string, string, interface{}, context.Context) error); ok {
-		r0 = rf(name, mType, value, ctx)
+	if rf, ok := ret.Get(0).(func(context.Context, string, string, interface{}) error); ok {
+		r0 = rf(ctx, name, mType, value)
 	} else {
 		r0 = ret.Error(0)
 	}
@@ -163,17 +163,17 @@ type MockStorage_Set_Call struct {
 }
 
 // Set is a helper method to define mock.On call
+//   - ctx context.Context
 //   - name string
 //   - mType string
 //   - value interface{}
-//   - ctx context.Context
-func (_e *MockStorage_Expecter) Set(name interface{}, mType interface{}, value interface{}, ctx interface{}) *MockStorage_Set_Call {
-	return &MockStorage_Set_Call{Call: _e.mock.On("Set", name, mType, value, ctx)}
+func (_e *MockStorage_Expecter) Set(ctx interface{}, name interface{}, mType interface{}, value interface{}) *MockStorage_Set_Call {
+	return &MockStorage_Set_Call{Call: _e.mock.On("Set", ctx, name, mType, value)}
 }
 
-func (_c *MockStorage_Set_Call) Run(run func(name string, mType string, value interface{}, ctx context.Context)) *MockStorage_Set_Call {
+func (_c *MockStorage_Set_Call) Run(run func(ctx context.Context, name string, mType string, value interface{})) *MockStorage_Set_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(string), args[1].(string), args[2].(interface{}), args[3].(context.Context))
+		run(args[0].(context.Context), args[1].(string), args[2].(string), args[3].(interface{}))
 	})
 	return _c
 }
@@ -183,22 +183,22 @@ func (_c *MockStorage_Set_Call) Return(_a0 error) *MockStorage_Set_Call {
 	return _c
 }
 
-func (_c *MockStorage_Set_Call) RunAndReturn(run func(string, string, interface{}, context.Context) error) *MockStorage_Set_Call {
+func (_c *MockStorage_Set_Call) RunAndReturn(run func(context.Context, string, string, interface{}) error) *MockStorage_Set_Call {
 	_c.Call.Return(run)
 	return _c
 }
 
-// SetAll provides a mock function with given fields: data, ctx
-func (_m *MockStorage) SetAll(data map[string]interface{}, ctx context.Context) error {
-	ret := _m.Called(data, ctx)
+// SetAll provides a mock function with given fields: ctx, data
+func (_m *MockStorage) SetAll(ctx context.Context, data map[string]interface{}) error {
+	ret := _m.Called(ctx, data)
 
 	if len(ret) == 0 {
 		panic("no return value specified for SetAll")
 	}
 
 	var r0 error
-	if rf, ok := ret.Get(0).(func(map[string]interface{}, context.Context) error); ok {
-		r0 = rf(data, ctx)
+	if rf, ok := ret.Get(0).(func(context.Context, map[string]interface{}) error); ok {
+		r0 = rf(ctx, data)
 	} else {
 		r0 = ret.Error(0)
 	}
@@ -212,15 +212,15 @@ type MockStorage_SetAll_Call struct {
 }
 
 // SetAll is a helper method to define mock.On call
-//   - data map[string]interface{}
 //   - ctx context.Context
-func (_e *MockStorage_Expecter) SetAll(data interface{}, ctx interface{}) *MockStorage_SetAll_Call {
-	return &MockStorage_SetAll_Call{Call: _e.mock.On("SetAll", data, ctx)}
+//   - data map[string]interface{}
+func (_e *MockStorage_Expecter) SetAll(ctx interface{}, data interface{}) *MockStorage_SetAll_Call {
+	return &MockStorage_SetAll_Call{Call: _e.mock.On("SetAll", ctx, data)}
 }
 
-func (_c *MockStorage_SetAll_Call) Run(run func(data map[string]interface{}, ctx context.Context)) *MockStorage_SetAll_Call {
+func (_c *MockStorage_SetAll_Call) Run(run func(ctx context.Context, data map[string]interface{})) *MockStorage_SetAll_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(map[string]interface{}), args[1].(context.Context))
+		run(args[0].(context.Context), args[1].(map[string]interface{}))
 	})
 	return _c
 }
@@ -230,22 +230,22 @@ func (_c *MockStorage_SetAll_Call) Return(_a0 error) *MockStorage_SetAll_Call {
 	return _c
 }
 
-func (_c *MockStorage_SetAll_Call) RunAndReturn(run func(map[string]interface{}, context.Context) error) *MockStorage_SetAll_Call {
+func (_c *MockStorage_SetAll_Call) RunAndReturn(run func(context.Context, map[string]interface{}) error) *MockStorage_SetAll_Call {
 	_c.Call.Return(run)
 	return _c
 }
 
-// SetBatch provides a mock function with given fields: metrics, ctx
-func (_m *MockStorage) SetBatch(metrics []models.Metrics, ctx context.Context) error {
-	ret := _m.Called(metrics, ctx)
+// SetBatch provides a mock function with given fields: ctx, metrics
+func (_m *MockStorage) SetBatch(ctx context.Context, metrics []models.Metrics) error {
+	ret := _m.Called(ctx, metrics)
 
 	if len(ret) == 0 {
 		panic("no return value specified for SetBatch")
 	}
 
 	var r0 error
-	if rf, ok := ret.Get(0).(func([]models.Metrics, context.Context) error); ok {
-		r0 = rf(metrics, ctx)
+	if rf, ok := ret.Get(0).(func(context.Context, []models.Metrics) error); ok {
+		r0 = rf(ctx, metrics)
 	} else {
 		r0 = ret.Error(0)
 	}
@@ -259,15 +259,15 @@ type MockStorage_SetBatch_Call struct {
 }
 
 // SetBatch is a helper method to define mock.On call
-//   - metrics []models.Metrics
 //   - ctx context.Context
-func (_e *MockStorage_Expecter) SetBatch(metrics interface{}, ctx interface{}) *MockStorage_SetBatch_Call {
-	return &MockStorage_SetBatch_Call{Call: _e.mock.On("SetBatch", metrics, ctx)}
+//   - metrics []models.Metrics
+func (_e *MockStorage_Expecter) SetBatch(ctx interface{}, metrics interface{}) *MockStorage_SetBatch_Call {
+	return &MockStorage_SetBatch_Call{Call: _e.mock.On("SetBatch", ctx, metrics)}
 }
 
-func (_c *MockStorage_SetBatch_Call) Run(run func(metrics []models.Metrics, ctx context.Context)) *MockStorage_SetBatch_Call {
+func (_c *MockStorage_SetBatch_Call) Run(run func(ctx context.Context, metrics []models.Metrics)) *MockStorage_SetBatch_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].([]models.Metrics), args[1].(context.Context))
+		run(args[0].(context.Context), args[1].([]models.Metrics))
 	})
 	return _c
 }
@@ -277,7 +277,7 @@ func (_c *MockStorage_SetBatch_Call) Return(_a0 error) *MockStorage_SetBatch_Cal
 	return _c
 }
 
-func (_c *MockStorage_SetBatch_Call) RunAndReturn(run func([]models.Metrics, context.Context) error) *MockStorage_SetBatch_Call {
+func (_c *MockStorage_SetBatch_Call) RunAndReturn(run func(context.Context, []models.Metrics) error) *MockStorage_SetBatch_Call {
 	_c.Call.Return(run)
 	return _c
 }

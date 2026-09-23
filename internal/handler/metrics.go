@@ -3,18 +3,20 @@ package handler
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"strconv"
 
 	models "github.com/kheguy/collector/internal/model"
+	metricservice "github.com/kheguy/collector/internal/service"
 )
 
 type Service interface {
-	GetMetric(name string, ctx context.Context) (string, error)
-	GetRawMetric(name string, ctx context.Context) (interface{}, error)
+	GetMetric(ctx context.Context, name string) (string, error)
+	GetRawMetric(ctx context.Context, name string) (interface{}, error)
 	GetAllMetrics(ctx context.Context) (map[string]interface{}, error)
-	UpdateMetrics(name string, typeOfValue string, value interface{}, ctx context.Context) error
-	UpdateMetricsBatch(metrics []models.Metrics, ctx context.Context) error
+	UpdateMetrics(ctx context.Context, name string, typeOfValue string, value interface{}) error
+	UpdateMetricsBatch(ctx context.Context, metrics []models.Metrics) error
 }
 
 type Renderer interface {
@@ -41,7 +43,7 @@ func (h *MetricsHandler) ValueHandler(res http.ResponseWriter, req *http.Request
 		return
 	}
 
-	metricValue, err := h.service.GetMetric(name, req.Context())
+	metricValue, err := h.service.GetMetric(req.Context(), name)
 
 	if err != nil {
 		http.Error(res, http.StatusText(500), http.StatusInternalServerError)
@@ -67,10 +69,10 @@ func (h *MetricsHandler) UpdateHandler(res http.ResponseWriter, req *http.Reques
 		return
 	}
 
-	err := h.service.UpdateMetrics(name, typeOfValue, value, req.Context())
+	err := h.service.UpdateMetrics(req.Context(), name, typeOfValue, value)
 
 	if err != nil {
-		http.Error(res, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
+		writeServiceError(res, err)
 		return
 	}
 
@@ -108,12 +110,12 @@ func (h *MetricsHandler) JSONUpdateHandler(res http.ResponseWriter, req *http.Re
 		http.Error(res, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
 		return
 	}
-	if err := h.service.UpdateMetrics(metric.ID, metric.MType, value, req.Context()); err != nil {
-		http.Error(res, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
+	if err := h.service.UpdateMetrics(req.Context(), metric.ID, metric.MType, value); err != nil {
+		writeServiceError(res, err)
 		return
 	}
 
-	stored, err := h.service.GetRawMetric(metric.ID, req.Context())
+	stored, err := h.service.GetRawMetric(req.Context(), metric.ID)
 
 	if err != nil {
 		http.Error(res, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
@@ -135,8 +137,8 @@ func (h *MetricsHandler) JSONBatchUpdateHandler(res http.ResponseWriter, req *ht
 		return
 	}
 
-	if err := h.service.UpdateMetricsBatch(metrics, req.Context()); err != nil {
-		http.Error(res, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
+	if err := h.service.UpdateMetricsBatch(req.Context(), metrics); err != nil {
+		writeServiceError(res, err)
 		return
 	}
 
@@ -155,7 +157,7 @@ func (h *MetricsHandler) JSONValueHandler(res http.ResponseWriter, req *http.Req
 		return
 	}
 
-	stored, err := h.service.GetRawMetric(metric.ID, req.Context())
+	stored, err := h.service.GetRawMetric(req.Context(), metric.ID)
 
 	if err != nil {
 		http.Error(res, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
@@ -173,6 +175,15 @@ func (h *MetricsHandler) JSONValueHandler(res http.ResponseWriter, req *http.Req
 		return
 	}
 	writeJSON(res, http.StatusOK, result)
+}
+
+func writeServiceError(res http.ResponseWriter, err error) {
+	if errors.Is(err, metricservice.ErrInvalidMetric) {
+		http.Error(res, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
+		return
+	}
+
+	http.Error(res, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 }
 
 func makeMetric(id string, mType string, value interface{}) models.Metrics {

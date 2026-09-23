@@ -1,5 +1,5 @@
 CREATE TABLE metrics (
-    name TEXT PRIMARY KEY,
+    name VARCHAR(255) PRIMARY KEY,
     mtype TEXT NOT NULL CHECK (mtype IN ('gauge', 'counter')),
     delta BIGINT,
     value DOUBLE PRECISION,

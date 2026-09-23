@@ -9,6 +9,7 @@ import (
 
 	"github.com/kheguy/collector/internal/mocks"
 	models "github.com/kheguy/collector/internal/model"
+	metricservice "github.com/kheguy/collector/internal/service"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
@@ -19,7 +20,7 @@ func TestValueHandler_Success(t *testing.T) {
 	req.SetPathValue("name", "test")
 
 	serviceMock := mocks.NewMockService(t)
-	serviceMock.EXPECT().GetMetric("test", req.Context()).Return("Brrrrrrbzzzzzzz", nil).Once()
+	serviceMock.EXPECT().GetMetric(req.Context(), "test").Return("Brrrrrrbzzzzzzz", nil).Once()
 	handler := MakeNewMetricsHandler(serviceMock, mocks.NewMockRenderer(t))
 	w := httptest.NewRecorder()
 
@@ -34,7 +35,7 @@ func TestValueHandler_NotFound(t *testing.T) {
 	req.SetPathValue("name", "TYKTOBRAT")
 
 	serviceMock := mocks.NewMockService(t)
-	serviceMock.EXPECT().GetMetric("TYKTOBRAT", req.Context()).Return("", nil).Once()
+	serviceMock.EXPECT().GetMetric(req.Context(), "TYKTOBRAT").Return("", nil).Once()
 	handler := MakeNewMetricsHandler(serviceMock, mocks.NewMockRenderer(t))
 	w := httptest.NewRecorder()
 
@@ -48,7 +49,7 @@ func TestValueHandler_ServiceError(t *testing.T) {
 	req.SetPathValue("name", "test")
 
 	serviceMock := mocks.NewMockService(t)
-	serviceMock.EXPECT().GetMetric("test", req.Context()).Return("", assert.AnError).Once()
+	serviceMock.EXPECT().GetMetric(req.Context(), "test").Return("", assert.AnError).Once()
 	handler := MakeNewMetricsHandler(serviceMock, mocks.NewMockRenderer(t))
 	w := httptest.NewRecorder()
 
@@ -74,7 +75,7 @@ func TestUpdateHandler_Success(t *testing.T) {
 	req.SetPathValue("value", "404")
 
 	serviceMock := mocks.NewMockService(t)
-	serviceMock.EXPECT().UpdateMetrics("test", "gauge", "404", req.Context()).Return(nil).Once()
+	serviceMock.EXPECT().UpdateMetrics(req.Context(), "test", "gauge", "404").Return(nil).Once()
 	handler := MakeNewMetricsHandler(serviceMock, mocks.NewMockRenderer(t))
 	w := httptest.NewRecorder()
 
@@ -91,7 +92,26 @@ func TestUpdateHandler_ServiceError(t *testing.T) {
 	req.SetPathValue("value", "404")
 
 	serviceMock := mocks.NewMockService(t)
-	serviceMock.EXPECT().UpdateMetrics("test", "gauge", "404", req.Context()).Return(assert.AnError).Once()
+	serviceMock.EXPECT().UpdateMetrics(req.Context(), "test", "gauge", "404").Return(assert.AnError).Once()
+	handler := MakeNewMetricsHandler(serviceMock, mocks.NewMockRenderer(t))
+	w := httptest.NewRecorder()
+
+	handler.UpdateHandler(w, req)
+
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+}
+
+func TestUpdateHandler_InvalidMetric(t *testing.T) {
+	req := httptest.NewRequest(http.MethodPost, "/update/gauge/test/invalid", nil)
+	req.SetPathValue("type", "gauge")
+	req.SetPathValue("name", "test")
+	req.SetPathValue("value", "invalid")
+
+	serviceMock := mocks.NewMockService(t)
+	serviceMock.EXPECT().
+		UpdateMetrics(req.Context(), "test", "gauge", "invalid").
+		Return(metricservice.ErrInvalidMetric).
+		Once()
 	handler := MakeNewMetricsHandler(serviceMock, mocks.NewMockRenderer(t))
 	w := httptest.NewRecorder()
 
@@ -108,11 +128,11 @@ func TestJSONUpdateHandler_GaugeSuccess(t *testing.T) {
 	)
 	serviceMock := mocks.NewMockService(t)
 	serviceMock.EXPECT().
-		UpdateMetrics("temperature", models.Gauge, "12.5", req.Context()).
+		UpdateMetrics(req.Context(), "temperature", models.Gauge, "12.5").
 		Return(nil).
 		Once()
 	serviceMock.EXPECT().
-		GetRawMetric("temperature", req.Context()).
+		GetRawMetric(req.Context(), "temperature").
 		Return(12.5, nil).
 		Once()
 	handler := MakeNewMetricsHandler(serviceMock, mocks.NewMockRenderer(t))
@@ -138,11 +158,11 @@ func TestJSONUpdateHandler_GetStoredMetricError(t *testing.T) {
 	)
 	serviceMock := mocks.NewMockService(t)
 	serviceMock.EXPECT().
-		UpdateMetrics("temperature", models.Gauge, "12.5", req.Context()).
+		UpdateMetrics(req.Context(), "temperature", models.Gauge, "12.5").
 		Return(nil).
 		Once()
 	serviceMock.EXPECT().
-		GetRawMetric("temperature", req.Context()).
+		GetRawMetric(req.Context(), "temperature").
 		Return(nil, assert.AnError).
 		Once()
 	handler := MakeNewMetricsHandler(serviceMock, mocks.NewMockRenderer(t))
@@ -166,7 +186,7 @@ func TestJSONBatchUpdateHandler_Success(t *testing.T) {
 		strings.NewReader(`[{"id":"temperature","type":"gauge","value":12.5},{"id":"requests","type":"counter","delta":3}]`),
 	)
 	serviceMock := mocks.NewMockService(t)
-	serviceMock.EXPECT().UpdateMetricsBatch(metrics, req.Context()).Return(nil).Once()
+	serviceMock.EXPECT().UpdateMetricsBatch(req.Context(), metrics).Return(nil).Once()
 	handler := MakeNewMetricsHandler(serviceMock, mocks.NewMockRenderer(t))
 	w := httptest.NewRecorder()
 
@@ -187,6 +207,24 @@ func TestJSONBatchUpdateHandler_InvalidJSON(t *testing.T) {
 	assert.Equal(t, http.StatusBadRequest, w.Code)
 }
 
+func TestJSONBatchUpdateHandler_ServiceError(t *testing.T) {
+	gauge := 12.5
+	metrics := []models.Metrics{{ID: "temperature", MType: models.Gauge, Value: &gauge}}
+	req := httptest.NewRequest(
+		http.MethodPost,
+		"/updates/",
+		strings.NewReader(`[{"id":"temperature","type":"gauge","value":12.5}]`),
+	)
+	serviceMock := mocks.NewMockService(t)
+	serviceMock.EXPECT().UpdateMetricsBatch(req.Context(), metrics).Return(assert.AnError).Once()
+	handler := MakeNewMetricsHandler(serviceMock, mocks.NewMockRenderer(t))
+	w := httptest.NewRecorder()
+
+	handler.JSONBatchUpdateHandler(w, req)
+
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+}
+
 func TestJSONValueHandler_Success(t *testing.T) {
 	req := httptest.NewRequest(
 		http.MethodPost,
@@ -194,7 +232,7 @@ func TestJSONValueHandler_Success(t *testing.T) {
 		strings.NewReader(`{"id":"requests","type":"counter"}`),
 	)
 	serviceMock := mocks.NewMockService(t)
-	serviceMock.EXPECT().GetRawMetric("requests", req.Context()).Return(7, nil).Once()
+	serviceMock.EXPECT().GetRawMetric(req.Context(), "requests").Return(7, nil).Once()
 	handler := MakeNewMetricsHandler(serviceMock, mocks.NewMockRenderer(t))
 	w := httptest.NewRecorder()
 
@@ -216,7 +254,7 @@ func TestJSONValueHandler_NotFound(t *testing.T) {
 		strings.NewReader(`{"id":"unknown","type":"counter"}`),
 	)
 	serviceMock := mocks.NewMockService(t)
-	serviceMock.EXPECT().GetRawMetric("unknown", req.Context()).Return(nil, nil).Once()
+	serviceMock.EXPECT().GetRawMetric(req.Context(), "unknown").Return(nil, nil).Once()
 	handler := MakeNewMetricsHandler(serviceMock, mocks.NewMockRenderer(t))
 	w := httptest.NewRecorder()
 

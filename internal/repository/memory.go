@@ -18,14 +18,18 @@ func NewMemoryStorage() *MemoryStorage {
 	}
 }
 
-func (s *MemoryStorage) Get(name string, ctx context.Context) (interface{}, error) {
+func (s *MemoryStorage) Ping(context.Context) error {
+	return nil
+}
+
+func (s *MemoryStorage) Get(ctx context.Context, name string) (interface{}, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	return s.data[name], nil
 }
 
-func (s *MemoryStorage) Set(name string, mType string, value interface{}, ctx context.Context) error {
+func (s *MemoryStorage) Set(ctx context.Context, name string, mType string, value interface{}) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -41,7 +45,7 @@ func (s *MemoryStorage) Set(name string, mType string, value interface{}, ctx co
 	return nil
 }
 
-func (s *MemoryStorage) SetBatch(metrics []models.Metrics, ctx context.Context) error {
+func (s *MemoryStorage) SetBatch(ctx context.Context, metrics []models.Metrics) error {
 	if len(metrics) == 0 {
 		return nil
 	}
@@ -84,7 +88,7 @@ func (s *MemoryStorage) GetAll(ctx context.Context) (map[string]interface{}, err
 	return result, nil
 }
 
-func (s *MemoryStorage) SetAll(d map[string]interface{}, ctx context.Context) error {
+func (s *MemoryStorage) SetAll(ctx context.Context, d map[string]interface{}) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.data = d

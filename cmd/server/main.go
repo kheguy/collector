@@ -11,15 +11,14 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/kheguy/collector/internal/config"
+	"github.com/kheguy/collector/internal/database"
 	"github.com/kheguy/collector/internal/handler"
 	"github.com/kheguy/collector/internal/middlewares"
 	"github.com/kheguy/collector/internal/repository"
 	"github.com/kheguy/collector/internal/service"
 	"github.com/kheguy/collector/internal/templates"
-	"github.com/kheguy/collector/migrations"
 )
 
 func main() {
@@ -41,33 +40,32 @@ func main() {
 	var cancelSave context.CancelFunc = func() {}
 	var saveWG sync.WaitGroup
 	var storage service.Storage
+	var pinger handler.Pinger
 	if cfg.DBAddress != "" {
-		if err := migrations.Up(cfg.DBAddress); err != nil {
-			log.Fatal("Database migration error: ", err)
-		}
-
-		// В общем, тут сначала был Coon, но я почитал, что безопаснее пулл, поэтому вот так
-		pool, err := pgxpool.New(context.Background(), cfg.DBAddress)
+		dbClient, err := database.NewClient(context.Background(), cfg.DBAddress)
 		if err != nil {
-			log.Fatal("Unable to connect to database: ", err)
+			log.Fatal("Database initialization error: ", err)
 		}
-		defer pool.Close()
+		defer dbClient.Close()
 
-		storage = repository.NewDBStorage(pool)
-
-		// Он же по сути только для кейса с БД нужен
-		healthHandler := handler.MakeNewHealthHandler(pool)
-		r.Get(`/ping`, healthHandler.PingHandler)
+		storage = dbClient.Storage()
+		pinger = dbClient
 	} else {
-		storage = repository.NewMemoryStorage()
+		memoryStorage := repository.NewMemoryStorage()
+		storage = memoryStorage
+		pinger = memoryStorage
+
 		fileProccessor := repository.NewFileProcessor(cfg.FileStoragePath)
+		if cfg.Restore || cfg.StoreInterval > 0 {
+			pinger = fileProccessor
+		}
 
 		if cfg.Restore {
 			restoredData, err := fileProccessor.Restore()
 			if err != nil {
 				log.Fatal("Metrics restore error: ", err)
 			}
-			storage.SetAll(restoredData, context.Background())
+			storage.SetAll(context.Background(), restoredData)
 		}
 
 		saveCtx, cancel := context.WithCancel(context.Background())
@@ -104,16 +102,16 @@ func main() {
 		}
 	}
 
+	healthHandler := handler.MakeNewHealthHandler(pinger)
+	r.Get(`/ping`, healthHandler.PingHandler)
+
 	metricsService := service.MakeNewMetricsService(storage)
 
 	metricsHandler := handler.MakeNewMetricsHandler(metricsService, renderer)
 
-	handler.MakeNewCommonHandler()
-
 	r.Post(`/update/{type}/{name}/{value}`, metricsHandler.UpdateHandler)
 	r.Post(`/update`, metricsHandler.JSONUpdateHandler)
 	r.Post(`/update/`, metricsHandler.JSONUpdateHandler)
-	// Меня все вот эти повторы очень смущают
 	r.Post(`/updates`, metricsHandler.JSONBatchUpdateHandler)
 	r.Post(`/updates/`, metricsHandler.JSONBatchUpdateHandler)
 	r.Get(`/value/{type}/{name}`, metricsHandler.ValueHandler)

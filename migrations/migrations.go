@@ -1,15 +1,24 @@
 package migrations
 
 import (
+	"embed"
 	"errors"
 
 	"github.com/golang-migrate/migrate/v4"
 	_ "github.com/golang-migrate/migrate/v4/database/postgres"
-	_ "github.com/golang-migrate/migrate/v4/source/file"
+	"github.com/golang-migrate/migrate/v4/source/iofs"
 )
 
+//go:embed *.sql
+var files embed.FS
+
 func Up(databaseDSN string) error {
-	m, err := migrate.New("file://migrations", databaseDSN)
+	source, err := iofs.New(files, ".")
+	if err != nil {
+		return err
+	}
+
+	m, err := migrate.NewWithSourceInstance("iofs", source, databaseDSN)
 	if err != nil {
 		return err
 	}

@@ -47,10 +47,10 @@ func TestMemoryStorage_SetAndGet(t *testing.T) {
 			ctx := context.Background()
 
 			for _, value := range tt.values {
-				require.NoError(t, storage.Set(tt.metricName, tt.metricType, value, ctx))
+				require.NoError(t, storage.Set(ctx, tt.metricName, tt.metricType, value))
 			}
 
-			got, err := storage.Get(tt.metricName, ctx)
+			got, err := storage.Get(ctx, tt.metricName)
 			require.NoError(t, err)
 			assert.Equal(t, tt.want, got)
 		})
@@ -60,7 +60,7 @@ func TestMemoryStorage_SetAndGet(t *testing.T) {
 func TestMemoryStorage_SetBatch_MixedAndDuplicateMetrics(t *testing.T) {
 	storage := NewMemoryStorage()
 	ctx := context.Background()
-	require.NoError(t, storage.Set("requests", models.Counter, 5, ctx))
+	require.NoError(t, storage.Set(ctx, "requests", models.Counter, 5))
 
 	firstGauge, lastGauge := 1.5, 2.5
 	firstDelta, secondDelta := int64(2), int64(3)
@@ -71,7 +71,7 @@ func TestMemoryStorage_SetBatch_MixedAndDuplicateMetrics(t *testing.T) {
 		{ID: "requests", MType: models.Counter, Delta: &secondDelta},
 	}
 
-	require.NoError(t, storage.SetBatch(metrics, ctx))
+	require.NoError(t, storage.SetBatch(ctx, metrics))
 	got, err := storage.GetAll(ctx)
 
 	require.NoError(t, err)
@@ -90,7 +90,7 @@ func TestMemoryStorage_SetBatch_ValidationIsAtomic(t *testing.T) {
 		{ID: "requests", MType: models.Counter},
 	}
 
-	err := storage.SetBatch(metrics, ctx)
+	err := storage.SetBatch(ctx, metrics)
 
 	assert.EqualError(t, err, "counter has no delta")
 	got, getErr := storage.GetAll(ctx)
@@ -101,7 +101,7 @@ func TestMemoryStorage_SetBatch_ValidationIsAtomic(t *testing.T) {
 func TestMemoryStorage_Get_NotFound(t *testing.T) {
 	storage := NewMemoryStorage()
 
-	got, err := storage.Get("missing", context.Background())
+	got, err := storage.Get(context.Background(), "missing")
 
 	require.NoError(t, err)
 	assert.Nil(t, got)
@@ -110,8 +110,8 @@ func TestMemoryStorage_Get_NotFound(t *testing.T) {
 func TestMemoryStorage_GetAll_ReturnsCopy(t *testing.T) {
 	storage := NewMemoryStorage()
 	ctx := context.Background()
-	require.NoError(t, storage.Set("gauge", models.Gauge, 1.1, ctx))
-	require.NoError(t, storage.Set("counter", models.Counter, 2, ctx))
+	require.NoError(t, storage.Set(ctx, "gauge", models.Gauge, 1.1))
+	require.NoError(t, storage.Set(ctx, "counter", models.Counter, 2))
 
 	got, err := storage.GetAll(ctx)
 	require.NoError(t, err)
@@ -121,7 +121,7 @@ func TestMemoryStorage_GetAll_ReturnsCopy(t *testing.T) {
 	}, got)
 
 	got["gauge"] = 9.9
-	original, err := storage.Get("gauge", ctx)
+	original, err := storage.Get(ctx, "gauge")
 	require.NoError(t, err)
 	assert.Equal(t, 1.1, original)
 }
@@ -134,7 +134,7 @@ func TestMemoryStorage_SetAllAndClear(t *testing.T) {
 		"counter": 7,
 	}
 
-	require.NoError(t, storage.SetAll(data, ctx))
+	require.NoError(t, storage.SetAll(ctx, data))
 	got, err := storage.GetAll(ctx)
 	require.NoError(t, err)
 	assert.Equal(t, data, got)

@@ -15,6 +15,38 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+type batchResultsStub struct {
+	pgx.BatchResults
+	err error
+}
+
+func (r *batchResultsStub) Close() error {
+	return r.err
+}
+
+type batchTxStub struct {
+	pgx.Tx
+	batch      *pgx.Batch
+	results    pgx.BatchResults
+	committed  bool
+	rolledBack bool
+}
+
+func (tx *batchTxStub) SendBatch(_ context.Context, batch *pgx.Batch) pgx.BatchResults {
+	tx.batch = batch
+	return tx.results
+}
+
+func (tx *batchTxStub) Commit(context.Context) error {
+	tx.committed = true
+	return nil
+}
+
+func (tx *batchTxStub) Rollback(context.Context) error {
+	tx.rolledBack = true
+	return nil
+}
+
 func TestDBStorage_Get(t *testing.T) {
 	ctx := context.Background()
 	tests := []struct {
@@ -56,7 +88,7 @@ func TestDBStorage_Get(t *testing.T) {
 				Return(nil).
 				Once()
 
-			result, err := NewDBStorage(pool).Get("metric", ctx)
+			result, err := NewDBStorage(pool).Get(ctx, "metric")
 
 			require.NoError(t, err)
 			assert.Equal(t, tt.result, result)
@@ -77,7 +109,7 @@ func TestDBStorage_Get_NotFound(t *testing.T) {
 		Return(pgx.ErrNoRows).
 		Once()
 
-	result, err := NewDBStorage(pool).Get("missing", ctx)
+	result, err := NewDBStorage(pool).Get(ctx, "missing")
 
 	require.NoError(t, err)
 	assert.Nil(t, result)
@@ -119,7 +151,7 @@ func TestDBStorage_Set(t *testing.T) {
 				Return(pgconn.CommandTag{}, nil).
 				Once()
 
-			err := NewDBStorage(pool).Set("metric", tt.mType, tt.value, ctx)
+			err := NewDBStorage(pool).Set(ctx, "metric", tt.mType, tt.value)
 
 			assert.NoError(t, err)
 		})
@@ -137,6 +169,35 @@ func TestDBStorage_GetAll_ReturnsQueryError(t *testing.T) {
 	_, err := NewDBStorage(pool).GetAll(ctx)
 
 	assert.ErrorIs(t, err, assert.AnError)
+}
+
+func TestDBStorage_SetBatch_UsesBatchAndPreservesDuplicates(t *testing.T) {
+	ctx := context.Background()
+	pool := mocks.NewMockDBPool(t)
+	results := &batchResultsStub{}
+	tx := &batchTxStub{results: results}
+	pool.EXPECT().Begin(ctx).Return(tx, nil).Once()
+
+	firstGauge, lastGauge := 12.5, 15.5
+	firstDelta, secondDelta := int64(3), int64(4)
+	metrics := []models.Metrics{
+		{ID: "temperature", MType: models.Gauge, Value: &firstGauge},
+		{ID: "requests", MType: models.Counter, Delta: &firstDelta},
+		{ID: "temperature", MType: models.Gauge, Value: &lastGauge},
+		{ID: "requests", MType: models.Counter, Delta: &secondDelta},
+	}
+
+	err := NewDBStorage(pool).SetBatch(ctx, metrics)
+
+	require.NoError(t, err)
+	require.NotNil(t, tx.batch)
+	require.Len(t, tx.batch.QueuedQueries, 4)
+	assert.Equal(t, []interface{}{"temperature", models.Gauge, firstGauge}, tx.batch.QueuedQueries[0].Arguments)
+	assert.Equal(t, []interface{}{"requests", models.Counter, firstDelta}, tx.batch.QueuedQueries[1].Arguments)
+	assert.Equal(t, []interface{}{"temperature", models.Gauge, lastGauge}, tx.batch.QueuedQueries[2].Arguments)
+	assert.Equal(t, []interface{}{"requests", models.Counter, secondDelta}, tx.batch.QueuedQueries[3].Arguments)
+	assert.True(t, tx.committed)
+	assert.True(t, tx.rolledBack)
 }
 
 func TestDBStorage_Clear(t *testing.T) {
@@ -159,6 +220,7 @@ func TestIsRetriablePostgresError(t *testing.T) {
 		want bool
 	}{
 		{name: "connection SQLSTATE", err: &pgconn.PgError{Code: "08006"}, want: true},
+		{name: "transaction rollback SQLSTATE", err: &pgconn.PgError{Code: "40001"}, want: true},
 		{name: "other SQLSTATE", err: &pgconn.PgError{Code: "23505"}, want: false},
 		{name: "canceled", err: context.Canceled, want: false},
 		{name: "deadline exceeded", err: context.DeadlineExceeded, want: false},
