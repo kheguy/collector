@@ -43,7 +43,7 @@ func (c *RetryClient) Do(req *http.Request) (*http.Response, error) {
 		attemptNumber++
 
 		var err error
-		response, err = c.client.Do(attempt)
+		response, err = sendRequest(c.client, attempt)
 		if err != nil && response != nil {
 			response.Body.Close()
 			response = nil
@@ -55,6 +55,10 @@ func (c *RetryClient) Do(req *http.Request) (*http.Response, error) {
 	}
 
 	return response, nil
+}
+
+func sendRequest(client HTTPClient, req *http.Request) (*http.Response, error) {
+	return client.Do(req)
 }
 
 func isRetriableNetworkError(err error) bool {

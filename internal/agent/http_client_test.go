@@ -44,6 +44,7 @@ func TestRetryClient_Do(t *testing.T) {
 	response, err := retryClient.Do(request)
 
 	require.NoError(t, err)
+	defer response.Body.Close()
 	assert.Equal(t, http.StatusOK, response.StatusCode)
 	assert.Equal(t, 2, attempts)
 }
