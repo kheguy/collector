@@ -57,6 +57,7 @@ func (c *RetryClient) Do(req *http.Request) (*http.Response, error) {
 	return response, nil
 }
 
+// bodyclose:handled
 func sendRequest(client HTTPClient, req *http.Request) (*http.Response, error) {
 	return client.Do(req)
 }
