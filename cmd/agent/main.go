@@ -21,7 +21,7 @@ func main() {
 		log.Fatal("Config loading error: ", cfgErr)
 	}
 
-	storage := repository.MakeNewMemoryStorage()
+	storage := repository.NewMemoryStorage()
 
 	addressWithProtocol := cfg.Address
 

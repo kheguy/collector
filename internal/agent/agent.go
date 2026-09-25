@@ -6,7 +6,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"log"
 	"math/rand/v2"
 	"net/http"
@@ -18,16 +17,16 @@ import (
 )
 
 type Agent struct {
-	storage    *repository.MemStorage
+	storage    *repository.MemoryStorage
 	url        string
-	httpClient http.Client
+	httpClient HTTPClient
 }
 
-func NewAgent(storage *repository.MemStorage, url string, httpClient http.Client) *Agent {
+func NewAgent(storage *repository.MemoryStorage, url string, httpClient http.Client) *Agent {
 	return &Agent{
 		storage:    storage,
 		url:        url,
-		httpClient: httpClient,
+		httpClient: NewRetryClient(&httpClient),
 	}
 }
 
@@ -40,7 +39,9 @@ func (a *Agent) Run(ctx context.Context, pollInterval time.Duration, reportInter
 	for {
 		select {
 		case <-getTicker.C:
-			a.collectMetrics()
+			if err := a.collectMetrics(ctx); err != nil {
+				log.Printf("Metrics collection error: %v", err)
+			}
 		case <-sendTicker.C:
 			if err := a.sendMetrics(ctx); err != nil {
 				log.Printf("Request error: %v", err)
@@ -52,7 +53,13 @@ func (a *Agent) Run(ctx context.Context, pollInterval time.Duration, reportInter
 }
 
 func (a *Agent) sendMetrics(ctx context.Context) error {
-	for name, value := range a.storage.GetAll() {
+	metrics, err := a.storage.GetAll(ctx)
+	if err != nil {
+		return err
+	}
+
+	batch := make([]models.Metrics, 0, len(metrics))
+	for name, value := range metrics {
 		metric := models.Metrics{ID: name}
 
 		switch v := value.(type) {
@@ -67,46 +74,47 @@ func (a *Agent) sendMetrics(ctx context.Context) error {
 			continue
 		}
 
-		body, err := json.Marshal(metric)
-		if err != nil {
-			return err
-		}
-		compressedBody, err := compress(body)
-		if err != nil {
-			return err
-		}
-
-		req, err := http.NewRequestWithContext(
-			ctx,
-			http.MethodPost,
-			fmt.Sprintf("%s/update/", a.url),
-			bytes.NewReader(compressedBody),
-		)
-		if err != nil {
-			return err
-		}
-		req.Header.Set("Content-Type", "application/json")
-		req.Header.Set("Content-Encoding", "gzip")
-		req.Header.Set("Accept", "application/json")
-		req.Header.Set("Accept-Encoding", "gzip")
-
-		res, err := a.httpClient.Do(req)
-		if err != nil {
-			return err
-		}
-
-		if _, err := io.Copy(io.Discard, res.Body); err != nil {
-			res.Body.Close()
-			return err
-		}
-		res.Body.Close()
-		if res.StatusCode < http.StatusOK || res.StatusCode >= http.StatusMultipleChoices {
-			return fmt.Errorf("server returned status %s", res.Status)
-		}
+		batch = append(batch, metric)
 	}
 
-	a.storage.Clear()
-	return nil
+	if len(batch) == 0 {
+		return nil
+	}
+
+	body, err := json.Marshal(batch)
+	if err != nil {
+		return err
+	}
+	compressedBody, err := compress(body)
+	if err != nil {
+		return err
+	}
+
+	req, err := http.NewRequestWithContext(
+		ctx,
+		http.MethodPost,
+		fmt.Sprintf("%s/updates/", a.url),
+		bytes.NewReader(compressedBody),
+	)
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Content-Encoding", "gzip")
+	req.Header.Set("Accept", "application/json")
+	req.Header.Set("Accept-Encoding", "gzip")
+
+	res, err := a.httpClient.Do(req)
+	if err != nil {
+		return err
+	}
+	defer res.Body.Close()
+
+	if res.StatusCode < http.StatusOK || res.StatusCode >= http.StatusMultipleChoices {
+		return fmt.Errorf("server returned status %s", res.Status)
+	}
+
+	return a.storage.Clear(ctx)
 }
 
 func compress(data []byte) ([]byte, error) {
@@ -121,14 +129,23 @@ func compress(data []byte) ([]byte, error) {
 	return buffer.Bytes(), nil
 }
 
-func (a *Agent) collectMetrics() {
-	a.collectRuntimeMetrics()
-	a.collectCustomMetrics()
+func (a *Agent) collectMetrics(ctx context.Context) error {
+	if err := a.collectRuntimeMetrics(ctx); err != nil {
+		return err
+	}
+	if err := a.collectCustomMetrics(ctx); err != nil {
+		return err
+	}
 
-	log.Printf("Metrics are updated pollCount: %v", a.storage.Get("PollCount"))
+	pollCount, err := a.storage.Get(ctx, "PollCount")
+	if err != nil {
+		return err
+	}
+	log.Printf("Metrics are updated pollCount: %v", pollCount)
+	return nil
 }
 
-func (a *Agent) collectRuntimeMetrics() {
+func (a *Agent) collectRuntimeMetrics(ctx context.Context) error {
 	var memStats runtime.MemStats
 	runtime.ReadMemStats(&memStats)
 
@@ -163,13 +180,19 @@ func (a *Agent) collectRuntimeMetrics() {
 	}
 
 	for name, value := range metrics {
-		a.storage.Set(name, models.Gauge, value)
+		if err := a.storage.Set(ctx, name, models.Gauge, value); err != nil {
+			return err
+		}
 	}
+
+	return nil
 }
 
-func (a *Agent) collectCustomMetrics() {
-	a.storage.Set("PollCount", models.Counter, 1)
+func (a *Agent) collectCustomMetrics(ctx context.Context) error {
+	if err := a.storage.Set(ctx, "PollCount", models.Counter, 1); err != nil {
+		return err
+	}
 
 	randomValue := rand.Float64() * 100
-	a.storage.Set("RandomValue", models.Gauge, randomValue)
+	return a.storage.Set(ctx, "RandomValue", models.Gauge, randomValue)
 }

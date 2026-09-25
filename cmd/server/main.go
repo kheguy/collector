@@ -13,6 +13,7 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"github.com/kheguy/collector/internal/config"
+	"github.com/kheguy/collector/internal/database"
 	"github.com/kheguy/collector/internal/handler"
 	"github.com/kheguy/collector/internal/middlewares"
 	"github.com/kheguy/collector/internal/repository"
@@ -36,49 +37,87 @@ func main() {
 	r.Use(middlewares.WithLogging)
 	r.Use(middlewares.WithGzip)
 
-	storage := repository.MakeNewMemoryStorage()
+	var cancelSave context.CancelFunc = func() {}
+	var saveWG sync.WaitGroup
+	var storage service.Storage
+	var pinger handler.Pinger
+	if cfg.DBAddress != "" {
+		dbClient, err := database.NewClient(context.Background(), cfg.DBAddress)
+		if err != nil {
+			log.Fatal("Database initialization error: ", err)
+		}
+		defer dbClient.Close()
 
-	if cfg.Restore {
-		if err := storage.Restore(cfg.FileStoragePath); err != nil {
-			log.Fatal("Metrics restore error: ", err)
+		storage = dbClient.Storage()
+		pinger = dbClient
+	} else {
+		memoryStorage := repository.NewMemoryStorage()
+		storage = memoryStorage
+		pinger = memoryStorage
+
+		fileProccessor := repository.NewFileProcessor(cfg.FileStoragePath)
+		if cfg.Restore || cfg.StoreInterval > 0 {
+			pinger = fileProccessor
+		}
+
+		if cfg.Restore {
+			restoredData, err := fileProccessor.Restore()
+			if err != nil {
+				log.Fatal("Metrics restore error: ", err)
+			}
+			storage.SetAll(context.Background(), restoredData)
+		}
+
+		saveCtx, cancel := context.WithCancel(context.Background())
+		cancelSave = cancel
+
+		if cfg.StoreInterval > 0 {
+			saveWG.Add(1)
+			go func() {
+				defer saveWG.Done()
+				ticker := time.NewTicker(time.Duration(cfg.StoreInterval) * time.Second)
+				defer ticker.Stop()
+				for {
+					select {
+					case <-ticker.C:
+						data, err := storage.GetAll(context.Background())
+						if err != nil {
+							log.Printf("Metrics save error: %v", err)
+						}
+						if err := fileProccessor.Save(data); err != nil {
+							log.Printf("Metrics save error: %v", err)
+						}
+					case <-saveCtx.Done():
+						data, err := storage.GetAll(context.Background())
+						if err != nil {
+							log.Printf("Final metrics save error: %v", err)
+						}
+						if err := fileProccessor.Save(data); err != nil {
+							log.Printf("Final metrics save error: %v", err)
+						}
+						return
+					}
+				}
+			}()
 		}
 	}
 
-	saveCtx, cancelSave := context.WithCancel(context.Background())
-	var saveWG sync.WaitGroup
+	healthHandler := handler.MakeNewHealthHandler(pinger)
+	r.Get(`/ping`, healthHandler.PingHandler)
 
-	if cfg.StoreInterval > 0 {
-		saveWG.Add(1)
-		go func() {
-			defer saveWG.Done()
-			ticker := time.NewTicker(time.Duration(cfg.StoreInterval) * time.Second)
-			defer ticker.Stop()
-			for {
-				select {
-				case <-ticker.C:
-					if err := storage.Save(cfg.FileStoragePath); err != nil {
-						log.Printf("Metrics save error: %v", err)
-					}
-				case <-saveCtx.Done():
-					if err := storage.Save(cfg.FileStoragePath); err != nil {
-						log.Printf("Final metrics save error: %v", err)
-					}
-					return
-				}
-			}
-		}()
-	}
-
-	metricsService := service.MakeNewMetricsService(storage, cfg.FileStoragePath, cfg.StoreInterval)
+	metricsService := service.MakeNewMetricsService(storage)
 
 	metricsHandler := handler.MakeNewMetricsHandler(metricsService, renderer)
 
 	r.Post(`/update/{type}/{name}/{value}`, metricsHandler.UpdateHandler)
 	r.Post(`/update`, metricsHandler.JSONUpdateHandler)
 	r.Post(`/update/`, metricsHandler.JSONUpdateHandler)
+	r.Post(`/updates`, metricsHandler.JSONBatchUpdateHandler)
+	r.Post(`/updates/`, metricsHandler.JSONBatchUpdateHandler)
 	r.Get(`/value/{type}/{name}`, metricsHandler.ValueHandler)
 	r.Post(`/value`, metricsHandler.JSONValueHandler)
 	r.Post(`/value/`, metricsHandler.JSONValueHandler)
+
 	r.Get(`/`, metricsHandler.HTMLListHandler)
 
 	server := &http.Server{
