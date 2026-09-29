@@ -6,6 +6,9 @@ filename: "mock_{{.InterfaceName | snakecase}}.gen.go"
 resolve-type-alias: false
 disable-version-string: true
 packages:
+  github.com/kheguy/collector/internal/agent:
+    interfaces:
+      HTTPClient:
   github.com/kheguy/collector/internal/handler:
     interfaces:
       Service:

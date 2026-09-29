@@ -4,42 +4,31 @@ import (
 	"compress/gzip"
 	"context"
 	"encoding/json"
+	"io"
 	"net/http"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
+	"github.com/kheguy/collector/internal/mocks"
 	models "github.com/kheguy/collector/internal/model"
 	"github.com/kheguy/collector/internal/repository"
+	"github.com/kheguy/collector/internal/signature"
 )
 
 const testAgentURL = "http://collector.test"
 
-type roundTripFunc func(*http.Request) (*http.Response, error)
-
-func (f roundTripFunc) RoundTrip(req *http.Request) (*http.Response, error) {
-	return f(req)
-}
-
-func testHTTPClient() http.Client {
-	return http.Client{
-		Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
-			return &http.Response{
-				StatusCode: http.StatusOK,
-				Status:     "200 OK",
-				Body:       http.NoBody,
-				Request:    req,
-			}, nil
-		}),
-	}
+func testHTTPClient(t *testing.T) *mocks.MockHTTPClient {
+	return mocks.NewMockHTTPClient(t)
 }
 
 func TestNewAgent(t *testing.T) {
 	storage := repository.NewMemoryStorage()
 
-	agent := NewAgent(storage, testAgentURL, testHTTPClient())
+	agent := NewAgent(storage, testAgentURL, testHTTPClient(t), "")
 
 	assert.NotNil(t, agent)
 	assert.NotNil(t, agent.url)
@@ -49,7 +38,7 @@ func TestAgent_CollectRuntimeMetrics(t *testing.T) {
 	storage := repository.NewMemoryStorage()
 	ctx := context.Background()
 
-	agent := NewAgent(storage, testAgentURL, testHTTPClient())
+	agent := NewAgent(storage, testAgentURL, testHTTPClient(t), "")
 
 	err := agent.collectRuntimeMetrics(ctx)
 	assert.NoError(t, err)
@@ -104,7 +93,7 @@ func TestAgent_CollectCustomMetrics(t *testing.T) {
 	err := storage.Set(ctx, "PollCount", models.Counter, 5)
 	assert.NoError(t, err)
 
-	agent := NewAgent(storage, testAgentURL, testHTTPClient())
+	agent := NewAgent(storage, testAgentURL, testHTTPClient(t), "")
 
 	err = agent.collectCustomMetrics(ctx)
 	assert.NoError(t, err)
@@ -123,7 +112,7 @@ func TestAgent_CollectCustomMetrics_WithNoExistingPollCount(t *testing.T) {
 	storage := repository.NewMemoryStorage()
 	ctx := context.Background()
 
-	agent := NewAgent(storage, testAgentURL, testHTTPClient())
+	agent := NewAgent(storage, testAgentURL, testHTTPClient(t), "")
 
 	// Не устанавливаем PollCount заранее
 	err := agent.collectCustomMetrics(ctx)
@@ -139,7 +128,7 @@ func TestAgent_CollectMetrics(t *testing.T) {
 	storage := repository.NewMemoryStorage()
 	ctx := context.Background()
 
-	agent := NewAgent(storage, testAgentURL, testHTTPClient())
+	agent := NewAgent(storage, testAgentURL, testHTTPClient(t), "")
 
 	err := agent.collectMetrics(ctx)
 	assert.NoError(t, err)
@@ -165,7 +154,7 @@ func TestAgent_CollectMetrics(t *testing.T) {
 func TestAgent_RunStopsAfterContextCancellation(t *testing.T) {
 	storage := repository.NewMemoryStorage()
 
-	agent := NewAgent(storage, testAgentURL, testHTTPClient())
+	agent := NewAgent(storage, testAgentURL, testHTTPClient(t), "")
 
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan struct{})
@@ -186,7 +175,7 @@ func TestAgent_RunStopsAfterContextCancellation(t *testing.T) {
 func TestAgent_RunCollectsMetrics(t *testing.T) {
 	storage := repository.NewMemoryStorage()
 
-	agent := NewAgent(storage, testAgentURL, testHTTPClient())
+	agent := NewAgent(storage, testAgentURL, testHTTPClient(t), "")
 
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan struct{})
@@ -213,10 +202,9 @@ func TestAgent_SendMetricsBatchSuccess(t *testing.T) {
 	require.NoError(t, storage.Set(ctx, "requests", models.Counter, 3))
 	require.NoError(t, storage.Set(ctx, "temperature", models.Gauge, 7.5))
 
-	requests := 0
 	var batch []models.Metrics
-	client := http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
-		requests++
+	client := mocks.NewMockHTTPClient(t)
+	client.EXPECT().Do(mock.Anything).RunAndReturn(func(req *http.Request) (*http.Response, error) {
 		assert.Equal(t, http.MethodPost, req.Method)
 		assert.Equal(t, "/updates/", req.URL.Path)
 		assert.Equal(t, "gzip", req.Header.Get("Content-Encoding"))
@@ -225,11 +213,10 @@ func TestAgent_SendMetricsBatchSuccess(t *testing.T) {
 		defer reader.Close()
 		require.NoError(t, json.NewDecoder(reader).Decode(&batch))
 		return &http.Response{StatusCode: http.StatusOK, Status: "200 OK", Body: http.NoBody}, nil
-	})}
+	}).Once()
 
-	agent := NewAgent(storage, testAgentURL, client)
+	agent := NewAgent(storage, testAgentURL, client, "")
 	require.NoError(t, agent.sendMetrics(ctx))
-	assert.Equal(t, 1, requests)
 
 	delta, value := int64(3), 7.5
 	assert.ElementsMatch(t, []models.Metrics{
@@ -243,15 +230,29 @@ func TestAgent_SendMetricsBatchSuccess(t *testing.T) {
 }
 
 func TestAgent_SendMetricsEmptyBatch(t *testing.T) {
-	requests := 0
-	client := http.Client{Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
-		requests++
-		return &http.Response{StatusCode: http.StatusOK, Body: http.NoBody}, nil
-	})}
+	client := mocks.NewMockHTTPClient(t)
 
-	agent := NewAgent(repository.NewMemoryStorage(), testAgentURL, client)
+	agent := NewAgent(repository.NewMemoryStorage(), testAgentURL, client, "")
 	require.NoError(t, agent.sendMetrics(context.Background()))
-	assert.Zero(t, requests)
+}
+
+func TestAgent_SendMetricsSignsRequest(t *testing.T) {
+	const key = "secret"
+
+	ctx := context.Background()
+	storage := repository.NewMemoryStorage()
+	require.NoError(t, storage.Set(ctx, "temperature", models.Gauge, 7.5))
+
+	client := mocks.NewMockHTTPClient(t)
+	client.EXPECT().Do(mock.Anything).RunAndReturn(func(req *http.Request) (*http.Response, error) {
+		body, err := io.ReadAll(req.Body)
+		require.NoError(t, err)
+		assert.Equal(t, signature.Calculate(body, key), req.Header.Get(signature.Header))
+		return &http.Response{StatusCode: http.StatusOK, Status: "200 OK", Body: http.NoBody}, nil
+	}).Once()
+
+	agent := NewAgent(storage, testAgentURL, client, key)
+	require.NoError(t, agent.sendMetrics(ctx))
 }
 
 func TestAgent_SendMetricsNon2xxKeepsMetrics(t *testing.T) {
@@ -259,15 +260,16 @@ func TestAgent_SendMetricsNon2xxKeepsMetrics(t *testing.T) {
 	storage := repository.NewMemoryStorage()
 	require.NoError(t, storage.Set(ctx, "temperature", models.Gauge, 7.5))
 
-	client := http.Client{Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
-		return &http.Response{
+	client := mocks.NewMockHTTPClient(t)
+	client.EXPECT().Do(mock.Anything).Return(
+		&http.Response{
 			StatusCode: http.StatusInternalServerError,
 			Status:     "500 Internal Server Error",
 			Body:       http.NoBody,
-		}, nil
-	})}
+		}, nil,
+	).Once()
 
-	agent := NewAgent(storage, testAgentURL, client)
+	agent := NewAgent(storage, testAgentURL, client, "")
 	assert.Error(t, agent.sendMetrics(ctx))
 
 	remaining, err := storage.Get(ctx, "temperature")
