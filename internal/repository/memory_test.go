@@ -144,3 +144,43 @@ func TestMemoryStorage_SetAllAndClear(t *testing.T) {
 	require.NoError(t, err)
 	assert.Empty(t, got)
 }
+
+func TestMemoryStorage_TakeAll(t *testing.T) {
+	storage := NewMemoryStorage()
+	ctx := context.Background()
+	require.NoError(t, storage.Set(ctx, "gauge", models.Gauge, 1.5))
+	require.NoError(t, storage.Set(ctx, "counter", models.Counter, 2))
+
+	taken, err := storage.TakeAll(ctx)
+	require.NoError(t, err)
+	assert.Equal(t, map[string]interface{}{
+		"gauge":   1.5,
+		"counter": 2,
+	}, taken)
+
+	remaining, err := storage.GetAll(ctx)
+	require.NoError(t, err)
+	assert.Empty(t, remaining)
+}
+
+func TestMemoryStorage_Restore(t *testing.T) {
+	storage := NewMemoryStorage()
+	ctx := context.Background()
+	require.NoError(t, storage.Set(ctx, "new-gauge", models.Gauge, 2.5))
+	require.NoError(t, storage.Set(ctx, "counter", models.Counter, 3))
+
+	err := storage.Restore(ctx, map[string]interface{}{
+		"new-gauge": 1.5,
+		"old-gauge": 1.0,
+		"counter":   2,
+	})
+	require.NoError(t, err)
+
+	got, err := storage.GetAll(ctx)
+	require.NoError(t, err)
+	assert.Equal(t, map[string]interface{}{
+		"new-gauge": 2.5,
+		"old-gauge": 1.0,
+		"counter":   5,
+	}, got)
+}

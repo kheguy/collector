@@ -12,6 +12,7 @@ type AgentConfig struct {
 	ReportInterval int    `env:"REPORT_INTERVAL"`
 	PollInterval   int    `env:"POLL_INTERVAL"`
 	Key            string `env:"KEY"`
+	RateLimit      int    `env:"RATE_LIMIT"`
 }
 
 type ServerConfig struct {
@@ -29,6 +30,7 @@ func LoadAgent() (AgentConfig, error) {
 		Address:        "localhost:8080",
 		ReportInterval: 10,
 		PollInterval:   2,
+		RateLimit:      1,
 	}
 
 	flags := flag.NewFlagSet("agent", flag.ContinueOnError)
@@ -36,6 +38,7 @@ func LoadAgent() (AgentConfig, error) {
 	flags.IntVar(&cfg.ReportInterval, "r", cfg.ReportInterval, "Report interval")
 	flags.IntVar(&cfg.PollInterval, "p", cfg.PollInterval, "Poll interval")
 	flags.StringVar(&cfg.Key, "k", cfg.Key, "Hash signing key")
+	flags.IntVar(&cfg.RateLimit, "l", cfg.RateLimit, "Maximum number of concurrent requests")
 
 	if err := flags.Parse(os.Args[1:]); err != nil {
 		return AgentConfig{}, err

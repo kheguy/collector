@@ -30,6 +30,29 @@ func TestLoadServerReadsKeyFromEnvironment(t *testing.T) {
 	require.Equal(t, "env-secret", cfg.Key)
 }
 
+func TestLoadAgentReadsRateLimitFromFlag(t *testing.T) {
+	restoreArgs := replaceArgs("agent", "-l=3")
+	t.Cleanup(restoreArgs)
+	restoreRateLimit := unsetEnv("RATE_LIMIT")
+	t.Cleanup(restoreRateLimit)
+
+	cfg, err := LoadAgent()
+
+	require.NoError(t, err)
+	require.Equal(t, 3, cfg.RateLimit)
+}
+
+func TestLoadAgentReadsRateLimitFromEnvironment(t *testing.T) {
+	restoreArgs := replaceArgs("agent", "-l=3")
+	t.Cleanup(restoreArgs)
+	t.Setenv("RATE_LIMIT", "5")
+
+	cfg, err := LoadAgent()
+
+	require.NoError(t, err)
+	require.Equal(t, 5, cfg.RateLimit)
+}
+
 func replaceArgs(args ...string) func() {
 	previous := os.Args
 	os.Args = args

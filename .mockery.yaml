@@ -9,6 +9,7 @@ packages:
   github.com/kheguy/collector/internal/agent:
     interfaces:
       HTTPClient:
+      SystemMetrics:
   github.com/kheguy/collector/internal/handler:
     interfaces:
       Service:
