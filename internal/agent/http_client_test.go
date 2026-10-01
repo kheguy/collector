@@ -10,7 +10,9 @@ import (
 	"net/url"
 	"testing"
 
+	"github.com/kheguy/collector/internal/mocks"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 )
 
@@ -20,7 +22,8 @@ func TestRetryClient_Do(t *testing.T) {
 	require.NoError(t, err)
 
 	attempts := 0
-	client := &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+	client := mocks.NewMockHTTPClient(t)
+	client.EXPECT().Do(mock.Anything).RunAndReturn(func(req *http.Request) (*http.Response, error) {
 		attempts++
 		body, readErr := io.ReadAll(req.Body)
 		require.NoError(t, readErr)
@@ -29,7 +32,7 @@ func TestRetryClient_Do(t *testing.T) {
 			return nil, &net.OpError{Op: "dial", Net: "tcp", Err: errors.New("connection refused")}
 		}
 		return &http.Response{StatusCode: http.StatusOK, Body: http.NoBody}, nil
-	})}
+	}).Twice()
 	retryClient := &RetryClient{
 		client: client,
 		retry: func(_ context.Context, operation func() error, isRetriable func(error) bool) error {

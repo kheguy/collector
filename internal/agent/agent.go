@@ -14,19 +14,22 @@ import (
 
 	models "github.com/kheguy/collector/internal/model"
 	"github.com/kheguy/collector/internal/repository"
+	"github.com/kheguy/collector/internal/signature"
 )
 
 type Agent struct {
 	storage    *repository.MemoryStorage
 	url        string
+	key        string
 	httpClient HTTPClient
 }
 
-func NewAgent(storage *repository.MemoryStorage, url string, httpClient http.Client) *Agent {
+func NewAgent(storage *repository.MemoryStorage, url string, httpClient HTTPClient, key string) *Agent {
 	return &Agent{
 		storage:    storage,
 		url:        url,
-		httpClient: NewRetryClient(&httpClient),
+		key:        key,
+		httpClient: NewRetryClient(httpClient),
 	}
 }
 
@@ -103,6 +106,9 @@ func (a *Agent) sendMetrics(ctx context.Context) error {
 	req.Header.Set("Content-Encoding", "gzip")
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("Accept-Encoding", "gzip")
+	if a.key != "" {
+		req.Header.Set(signature.Header, signature.Calculate(compressedBody, a.key))
+	}
 
 	res, err := a.httpClient.Do(req)
 	if err != nil {

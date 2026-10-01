@@ -11,6 +11,7 @@ type AgentConfig struct {
 	Address        string `env:"ADDRESS"`
 	ReportInterval int    `env:"REPORT_INTERVAL"`
 	PollInterval   int    `env:"POLL_INTERVAL"`
+	Key            string `env:"KEY"`
 }
 
 type ServerConfig struct {
@@ -19,6 +20,7 @@ type ServerConfig struct {
 	FileStoragePath string `env:"FILE_STORAGE_PATH"`
 	Restore         bool   `env:"RESTORE"`
 	DBAddress       string `env:"DATABASE_DSN"`
+	Key             string `env:"KEY"`
 }
 
 // Разделил так как уже путаница началась
@@ -33,6 +35,7 @@ func LoadAgent() (AgentConfig, error) {
 	flags.StringVar(&cfg.Address, "a", cfg.Address, "Address of the server")
 	flags.IntVar(&cfg.ReportInterval, "r", cfg.ReportInterval, "Report interval")
 	flags.IntVar(&cfg.PollInterval, "p", cfg.PollInterval, "Poll interval")
+	flags.StringVar(&cfg.Key, "k", cfg.Key, "Hash signing key")
 
 	if err := flags.Parse(os.Args[1:]); err != nil {
 		return AgentConfig{}, err
@@ -58,6 +61,7 @@ func LoadServer() (ServerConfig, error) {
 	flags.StringVar(&cfg.FileStoragePath, "f", cfg.FileStoragePath, "File storage path")
 	flags.BoolVar(&cfg.Restore, "r", cfg.Restore, "Restore metrics")
 	flags.StringVar(&cfg.DBAddress, "d", cfg.DBAddress, "Database address")
+	flags.StringVar(&cfg.Key, "k", cfg.Key, "Hash signing key")
 
 	if err := flags.Parse(os.Args[1:]); err != nil {
 		return ServerConfig{}, err

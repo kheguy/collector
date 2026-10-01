@@ -29,7 +29,7 @@ func main() {
 		addressWithProtocol = "http://" + addressWithProtocol
 	}
 
-	metricsAgent := agent.NewAgent(storage, addressWithProtocol, *http.DefaultClient)
+	metricsAgent := agent.NewAgent(storage, addressWithProtocol, http.DefaultClient, cfg.Key)
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
