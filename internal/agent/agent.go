@@ -26,8 +26,6 @@ type Agent struct {
 	system     SystemMetrics
 }
 
-type metricsJob map[string]interface{}
-
 func NewAgent(storage *repository.MemoryStorage, url string, httpClient HTTPClient, key string) *Agent {
 	return &Agent{
 		storage:    storage,
@@ -39,7 +37,11 @@ func NewAgent(storage *repository.MemoryStorage, url string, httpClient HTTPClie
 }
 
 func (a *Agent) Run(ctx context.Context, pollInterval time.Duration, reportInterval time.Duration, rateLimit int) {
-	jobs := make(chan metricsJob, rateLimit)
+	if rateLimit < 1 {
+		rateLimit = 1
+	}
+
+	jobs := make(chan map[string]interface{}, rateLimit)
 	var wg sync.WaitGroup
 
 	wg.Add(2)
@@ -79,11 +81,9 @@ func (a *Agent) Run(ctx context.Context, pollInterval time.Duration, reportInter
 				continue
 			}
 			select {
-			case jobs <- metricsJob(metrics):
+			case jobs <- metrics:
 			case <-ctx.Done():
-				if err := a.storage.Restore(context.Background(), metrics); err != nil {
-					log.Printf("Metrics restore error: %v", err)
-				}
+				a.restoreMetrics(metrics)
 				return
 			}
 		case <-ctx.Done():
@@ -112,37 +112,22 @@ func (a *Agent) collectLoop(
 	}
 }
 
-func (a *Agent) sendWorker(ctx context.Context, jobs <-chan metricsJob) {
+func (a *Agent) sendWorker(ctx context.Context, jobs <-chan map[string]interface{}) {
 	for metrics := range jobs {
 		if err := a.sendMetricsBatch(ctx, metrics); err != nil {
 			log.Printf("Request error: %v", err)
-			if restoreErr := a.storage.Restore(context.Background(), metrics); restoreErr != nil {
-				log.Printf("Metrics restore error: %v", restoreErr)
-			}
+			a.restoreMetrics(metrics)
 		}
 	}
 }
 
-func (a *Agent) sendMetrics(ctx context.Context) error {
-	metrics, err := a.storage.TakeAll(ctx)
-	if err != nil {
-		return err
+func (a *Agent) restoreMetrics(metrics map[string]interface{}) {
+	if err := a.storage.Restore(context.Background(), metrics); err != nil {
+		log.Printf("Metrics restore error: %v", err)
 	}
-	if len(metrics) == 0 {
-		return nil
-	}
-
-	if err := a.sendMetricsBatch(ctx, metricsJob(metrics)); err != nil {
-		if restoreErr := a.storage.Restore(context.Background(), metrics); restoreErr != nil {
-			return fmt.Errorf("send metrics: %w; restore metrics: %v", err, restoreErr)
-		}
-		return err
-	}
-
-	return nil
 }
 
-func (a *Agent) sendMetricsBatch(ctx context.Context, metrics metricsJob) error {
+func (a *Agent) sendMetricsBatch(ctx context.Context, metrics map[string]interface{}) error {
 	batch := make([]models.Metrics, 0, len(metrics))
 	for name, value := range metrics {
 		metric := models.Metrics{ID: name}

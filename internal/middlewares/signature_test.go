@@ -50,23 +50,19 @@ func TestWithSignatureRejectsInvalidRequest(t *testing.T) {
 	assert.Equal(t, signature.Calculate(recorder.Body.Bytes(), key), recorder.Header().Get(signature.Header))
 }
 
-func TestWithSignatureAcceptsRequestWithoutSignature(t *testing.T) {
+func TestWithSignatureRejectsRequestWithoutSignature(t *testing.T) {
 	const key = "secret"
 	handlerCalled := false
-	handler := WithSignature(key)(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+	handler := WithSignature(key)(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
 		handlerCalled = true
-		w.Header().Set("Content-Type", "application/json")
-		_, err := w.Write([]byte(`{"status":"ok"}`))
-		require.NoError(t, err)
 	}))
 	recorder := httptest.NewRecorder()
 
 	handler.ServeHTTP(recorder, httptest.NewRequest(http.MethodPost, "/value/", bytes.NewBufferString(`{"id":"metric"}`)))
 
-	require.Equal(t, http.StatusOK, recorder.Code)
-	assert.True(t, handlerCalled)
-	assert.Contains(t, recorder.Header().Get("Content-Type"), "application/json")
-	assert.NotEmpty(t, recorder.Header().Get(signature.Header))
+	require.Equal(t, http.StatusBadRequest, recorder.Code)
+	assert.False(t, handlerCalled)
+	assert.Equal(t, signature.Calculate(recorder.Body.Bytes(), key), recorder.Header().Get(signature.Header))
 }
 
 func TestWithSignatureDisabledWithoutKey(t *testing.T) {

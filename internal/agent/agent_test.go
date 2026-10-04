@@ -209,8 +209,10 @@ func TestAgent_RunCollectsMetrics(t *testing.T) {
 func TestAgent_SendMetricsBatchSuccess(t *testing.T) {
 	ctx := context.Background()
 	storage := repository.NewMemoryStorage()
-	require.NoError(t, storage.Set(ctx, "requests", models.Counter, 3))
-	require.NoError(t, storage.Set(ctx, "temperature", models.Gauge, 7.5))
+	metrics := map[string]interface{}{
+		"requests":    3,
+		"temperature": 7.5,
+	}
 
 	var batch []models.Metrics
 	client := mocks.NewMockHTTPClient(t)
@@ -226,62 +228,28 @@ func TestAgent_SendMetricsBatchSuccess(t *testing.T) {
 	}).Once()
 
 	agent := NewAgent(storage, testAgentURL, client, "")
-	require.NoError(t, agent.sendMetrics(ctx))
+	require.NoError(t, agent.sendMetricsBatch(ctx, metrics))
 
 	delta, value := int64(3), 7.5
 	assert.ElementsMatch(t, []models.Metrics{
 		{ID: "requests", MType: models.Counter, Delta: &delta},
 		{ID: "temperature", MType: models.Gauge, Value: &value},
 	}, batch)
-
-	remaining, err := storage.GetAll(ctx)
-	require.NoError(t, err)
-	assert.Empty(t, remaining)
 }
 
-func TestAgent_SendMetricsKeepsMetricsCollectedDuringRequest(t *testing.T) {
-	ctx := context.Background()
-	storage := repository.NewMemoryStorage()
-	require.NoError(t, storage.Set(ctx, "old", models.Gauge, 1.0))
-
-	requestStarted := make(chan struct{})
-	releaseRequest := make(chan struct{})
-	client := mocks.NewMockHTTPClient(t)
-	client.EXPECT().Do(mock.Anything).RunAndReturn(func(req *http.Request) (*http.Response, error) {
-		close(requestStarted)
-		<-releaseRequest
-		return &http.Response{StatusCode: http.StatusOK, Status: "200 OK", Body: http.NoBody}, nil
-	}).Once()
-
-	agent := NewAgent(storage, testAgentURL, client, "")
-	sendDone := make(chan error, 1)
-	go func() {
-		sendDone <- agent.sendMetrics(ctx)
-	}()
-
-	<-requestStarted
-	require.NoError(t, storage.Set(ctx, "new", models.Gauge, 2.0))
-	close(releaseRequest)
-	require.NoError(t, <-sendDone)
-
-	remaining, err := storage.GetAll(ctx)
-	require.NoError(t, err)
-	assert.Equal(t, map[string]interface{}{"new": 2.0}, remaining)
-}
-
-func TestAgent_SendMetricsEmptyBatch(t *testing.T) {
+func TestAgent_SendMetricsBatchEmpty(t *testing.T) {
 	client := mocks.NewMockHTTPClient(t)
 
 	agent := NewAgent(repository.NewMemoryStorage(), testAgentURL, client, "")
-	require.NoError(t, agent.sendMetrics(context.Background()))
+	require.NoError(t, agent.sendMetricsBatch(context.Background(), nil))
 }
 
-func TestAgent_SendMetricsSignsRequest(t *testing.T) {
+func TestAgent_SendMetricsBatchSignsRequest(t *testing.T) {
 	const key = "secret"
 
 	ctx := context.Background()
 	storage := repository.NewMemoryStorage()
-	require.NoError(t, storage.Set(ctx, "temperature", models.Gauge, 7.5))
+	metrics := map[string]interface{}{"temperature": 7.5}
 
 	client := mocks.NewMockHTTPClient(t)
 	client.EXPECT().Do(mock.Anything).RunAndReturn(func(req *http.Request) (*http.Response, error) {
@@ -292,13 +260,13 @@ func TestAgent_SendMetricsSignsRequest(t *testing.T) {
 	}).Once()
 
 	agent := NewAgent(storage, testAgentURL, client, key)
-	require.NoError(t, agent.sendMetrics(ctx))
+	require.NoError(t, agent.sendMetricsBatch(ctx, metrics))
 }
 
-func TestAgent_SendMetricsNon2xxKeepsMetrics(t *testing.T) {
+func TestAgent_SendWorkerRestoresMetricsAfterNon2xx(t *testing.T) {
 	ctx := context.Background()
 	storage := repository.NewMemoryStorage()
-	require.NoError(t, storage.Set(ctx, "temperature", models.Gauge, 7.5))
+	metrics := map[string]interface{}{"temperature": 7.5}
 
 	client := mocks.NewMockHTTPClient(t)
 	client.EXPECT().Do(mock.Anything).Return(
@@ -310,7 +278,10 @@ func TestAgent_SendMetricsNon2xxKeepsMetrics(t *testing.T) {
 	).Once()
 
 	agent := NewAgent(storage, testAgentURL, client, "")
-	assert.Error(t, agent.sendMetrics(ctx))
+	jobs := make(chan map[string]interface{}, 1)
+	jobs <- metrics
+	close(jobs)
+	agent.sendWorker(ctx, jobs)
 
 	remaining, err := storage.Get(ctx, "temperature")
 	require.NoError(t, err)
@@ -339,47 +310,58 @@ func TestAgent_CollectGopsutilMetrics(t *testing.T) {
 }
 
 func TestAgent_RunLimitsConcurrentRequests(t *testing.T) {
-	const rateLimit = 2
+	tests := []struct {
+		name      string
+		rateLimit int
+		want      int32
+	}{
+		{name: "configured limit", rateLimit: 2, want: 2},
+		{name: "minimum fallback", rateLimit: 0, want: 1},
+	}
 
-	storage := repository.NewMemoryStorage()
-	require.NoError(t, storage.Set(context.Background(), "temperature", models.Gauge, 7.5))
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			storage := repository.NewMemoryStorage()
+			require.NoError(t, storage.Set(context.Background(), "temperature", models.Gauge, 7.5))
 
-	var active atomic.Int32
-	var maximum atomic.Int32
-	client := mocks.NewMockHTTPClient(t)
-	client.EXPECT().Do(mock.Anything).RunAndReturn(func(req *http.Request) (*http.Response, error) {
-		current := active.Add(1)
-		defer active.Add(-1)
+			var active atomic.Int32
+			var maximum atomic.Int32
+			client := mocks.NewMockHTTPClient(t)
+			client.EXPECT().Do(mock.Anything).RunAndReturn(func(req *http.Request) (*http.Response, error) {
+				current := active.Add(1)
+				defer active.Add(-1)
 
-		for {
-			previous := maximum.Load()
-			if current <= previous || maximum.CompareAndSwap(previous, current) {
-				break
+				for {
+					previous := maximum.Load()
+					if current <= previous || maximum.CompareAndSwap(previous, current) {
+						break
+					}
+				}
+
+				<-req.Context().Done()
+				return nil, req.Context().Err()
+			})
+
+			agent := NewAgent(storage, testAgentURL, client, "")
+			useTestSystemMetrics(t, agent)
+			ctx, cancel := context.WithCancel(context.Background())
+			done := make(chan struct{})
+			go func() {
+				agent.Run(ctx, time.Millisecond, time.Millisecond, tt.rateLimit)
+				close(done)
+			}()
+
+			require.Eventually(t, func() bool {
+				return maximum.Load() == tt.want
+			}, time.Second, time.Millisecond)
+			assert.LessOrEqual(t, maximum.Load(), tt.want)
+
+			cancel()
+			select {
+			case <-done:
+			case <-time.After(time.Second):
+				t.Fatal("Run should stop after context cancellation")
 			}
-		}
-
-		<-req.Context().Done()
-		return nil, req.Context().Err()
-	})
-
-	agent := NewAgent(storage, testAgentURL, client, "")
-	useTestSystemMetrics(t, agent)
-	ctx, cancel := context.WithCancel(context.Background())
-	done := make(chan struct{})
-	go func() {
-		agent.Run(ctx, time.Millisecond, time.Millisecond, rateLimit)
-		close(done)
-	}()
-
-	require.Eventually(t, func() bool {
-		return maximum.Load() == rateLimit
-	}, time.Second, time.Millisecond)
-	assert.LessOrEqual(t, maximum.Load(), int32(rateLimit))
-
-	cancel()
-	select {
-	case <-done:
-	case <-time.After(time.Second):
-		t.Fatal("Run should stop after context cancellation")
+		})
 	}
 }

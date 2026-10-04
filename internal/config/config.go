@@ -2,6 +2,7 @@ package config
 
 import (
 	"flag"
+	"fmt"
 	"os"
 
 	"github.com/caarlos0/env/v11"
@@ -45,6 +46,9 @@ func LoadAgent() (AgentConfig, error) {
 	}
 	if err := env.Parse(&cfg); err != nil {
 		return AgentConfig{}, err
+	}
+	if cfg.RateLimit < 1 {
+		return AgentConfig{}, fmt.Errorf("rate limit must be at least 1, got %d", cfg.RateLimit)
 	}
 	return cfg, nil
 }

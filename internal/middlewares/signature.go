@@ -57,7 +57,7 @@ func WithSignature(key string) func(http.Handler) http.Handler {
 			r.Body = io.NopCloser(bytes.NewReader(body))
 
 			receivedSignature := r.Header.Get(signature.Header)
-			if receivedSignature != "" && !signature.Valid(body, key, receivedSignature) {
+			if !signature.Valid(body, key, receivedSignature) {
 				http.Error(responseWriter, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
 				return
 			}

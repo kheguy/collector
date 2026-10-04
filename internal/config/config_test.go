@@ -53,6 +53,17 @@ func TestLoadAgentReadsRateLimitFromEnvironment(t *testing.T) {
 	require.Equal(t, 5, cfg.RateLimit)
 }
 
+func TestLoadAgentRejectsInvalidRateLimit(t *testing.T) {
+	restoreArgs := replaceArgs("agent", "-l=0")
+	t.Cleanup(restoreArgs)
+	restoreRateLimit := unsetEnv("RATE_LIMIT")
+	t.Cleanup(restoreRateLimit)
+
+	_, err := LoadAgent()
+
+	require.EqualError(t, err, "rate limit must be at least 1, got 0")
+}
+
 func replaceArgs(args ...string) func() {
 	previous := os.Args
 	os.Args = args
