@@ -88,6 +88,35 @@ func (s *MemoryStorage) GetAll(ctx context.Context) (map[string]interface{}, err
 	return result, nil
 }
 
+func (s *MemoryStorage) TakeAll(ctx context.Context) (map[string]interface{}, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	result := s.data
+	s.data = make(map[string]interface{})
+
+	return result, nil
+}
+
+func (s *MemoryStorage) Restore(ctx context.Context, data map[string]interface{}) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	for name, value := range data {
+		switch value := value.(type) {
+		case int:
+			current, _ := s.data[name].(int)
+			s.data[name] = current + value
+		case float64:
+			if _, exists := s.data[name]; !exists {
+				s.data[name] = value
+			}
+		}
+	}
+
+	return nil
+}
+
 func (s *MemoryStorage) SetAll(ctx context.Context, d map[string]interface{}) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()

@@ -35,6 +35,7 @@ func main() {
 
 	r := chi.NewRouter()
 	r.Use(middlewares.WithLogging)
+	r.Use(middlewares.WithSignature(cfg.Key))
 	r.Use(middlewares.WithGzip)
 
 	var cancelSave context.CancelFunc = func() {}

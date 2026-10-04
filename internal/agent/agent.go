@@ -10,41 +10,81 @@ import (
 	"math/rand/v2"
 	"net/http"
 	"runtime"
+	"sync"
 	"time"
 
 	models "github.com/kheguy/collector/internal/model"
 	"github.com/kheguy/collector/internal/repository"
+	"github.com/kheguy/collector/internal/signature"
 )
 
 type Agent struct {
 	storage    *repository.MemoryStorage
 	url        string
+	key        string
 	httpClient HTTPClient
+	system     SystemMetrics
 }
 
-func NewAgent(storage *repository.MemoryStorage, url string, httpClient http.Client) *Agent {
+func NewAgent(storage *repository.MemoryStorage, url string, httpClient HTTPClient, key string) *Agent {
 	return &Agent{
 		storage:    storage,
 		url:        url,
-		httpClient: NewRetryClient(&httpClient),
+		key:        key,
+		httpClient: NewRetryClient(httpClient),
+		system:     gopsutilMetrics{},
 	}
 }
 
-func (a *Agent) Run(ctx context.Context, pollInterval time.Duration, reportInterval time.Duration) {
-	getTicker := time.NewTicker(pollInterval)
+func (a *Agent) Run(ctx context.Context, pollInterval time.Duration, reportInterval time.Duration, rateLimit int) {
+	if rateLimit < 1 {
+		rateLimit = 1
+	}
+
+	jobs := make(chan map[string]interface{}, rateLimit)
+	var wg sync.WaitGroup
+
+	wg.Add(2)
+	go func() {
+		defer wg.Done()
+		a.collectLoop(ctx, pollInterval, a.collectMetrics)
+	}()
+	go func() {
+		defer wg.Done()
+		a.collectLoop(ctx, pollInterval, a.collectGopsutilMetrics)
+	}()
+
+	for range rateLimit {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			a.sendWorker(ctx, jobs)
+		}()
+	}
+
 	sendTicker := time.NewTicker(reportInterval)
-	defer getTicker.Stop()
-	defer sendTicker.Stop()
+	defer func() {
+		sendTicker.Stop()
+		close(jobs)
+		wg.Wait()
+	}()
 
 	for {
 		select {
-		case <-getTicker.C:
-			if err := a.collectMetrics(ctx); err != nil {
-				log.Printf("Metrics collection error: %v", err)
-			}
 		case <-sendTicker.C:
-			if err := a.sendMetrics(ctx); err != nil {
-				log.Printf("Request error: %v", err)
+			metrics, err := a.storage.TakeAll(ctx)
+			if err != nil {
+				log.Printf("Metrics read error: %v", err)
+				continue
+			}
+			if len(metrics) == 0 {
+				continue
+			}
+			select {
+			case jobs <- metrics:
+			case <-ctx.Done():
+				a.restoreMetrics(metrics)
+				return
 			}
 		case <-ctx.Done():
 			return
@@ -52,12 +92,42 @@ func (a *Agent) Run(ctx context.Context, pollInterval time.Duration, reportInter
 	}
 }
 
-func (a *Agent) sendMetrics(ctx context.Context) error {
-	metrics, err := a.storage.GetAll(ctx)
-	if err != nil {
-		return err
-	}
+func (a *Agent) collectLoop(
+	ctx context.Context,
+	interval time.Duration,
+	collect func(context.Context) error,
+) {
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
 
+	for {
+		select {
+		case <-ticker.C:
+			if err := collect(ctx); err != nil {
+				log.Printf("Metrics collection error: %v", err)
+			}
+		case <-ctx.Done():
+			return
+		}
+	}
+}
+
+func (a *Agent) sendWorker(ctx context.Context, jobs <-chan map[string]interface{}) {
+	for metrics := range jobs {
+		if err := a.sendMetricsBatch(ctx, metrics); err != nil {
+			log.Printf("Request error: %v", err)
+			a.restoreMetrics(metrics)
+		}
+	}
+}
+
+func (a *Agent) restoreMetrics(metrics map[string]interface{}) {
+	if err := a.storage.Restore(context.Background(), metrics); err != nil {
+		log.Printf("Metrics restore error: %v", err)
+	}
+}
+
+func (a *Agent) sendMetricsBatch(ctx context.Context, metrics map[string]interface{}) error {
 	batch := make([]models.Metrics, 0, len(metrics))
 	for name, value := range metrics {
 		metric := models.Metrics{ID: name}
@@ -103,6 +173,9 @@ func (a *Agent) sendMetrics(ctx context.Context) error {
 	req.Header.Set("Content-Encoding", "gzip")
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("Accept-Encoding", "gzip")
+	if a.key != "" {
+		req.Header.Set(signature.Header, signature.Calculate(compressedBody, a.key))
+	}
 
 	res, err := a.httpClient.Do(req)
 	if err != nil {
@@ -114,7 +187,7 @@ func (a *Agent) sendMetrics(ctx context.Context) error {
 		return fmt.Errorf("server returned status %s", res.Status)
 	}
 
-	return a.storage.Clear(ctx)
+	return nil
 }
 
 func compress(data []byte) ([]byte, error) {
@@ -195,4 +268,31 @@ func (a *Agent) collectCustomMetrics(ctx context.Context) error {
 
 	randomValue := rand.Float64() * 100
 	return a.storage.Set(ctx, "RandomValue", models.Gauge, randomValue)
+}
+
+func (a *Agent) collectGopsutilMetrics(ctx context.Context) error {
+	totalMemory, freeMemory, err := a.system.VirtualMemory(ctx)
+	if err != nil {
+		return err
+	}
+
+	if err := a.storage.Set(ctx, "TotalMemory", models.Gauge, float64(totalMemory)); err != nil {
+		return err
+	}
+	if err := a.storage.Set(ctx, "FreeMemory", models.Gauge, float64(freeMemory)); err != nil {
+		return err
+	}
+
+	cpuUtilization, err := a.system.CPUPercent(ctx)
+	if err != nil {
+		return err
+	}
+	for index, value := range cpuUtilization {
+		name := fmt.Sprintf("CPUutilization%d", index+1)
+		if err := a.storage.Set(ctx, name, models.Gauge, value); err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
