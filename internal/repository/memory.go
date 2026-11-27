@@ -50,25 +50,22 @@ func (s *MemoryStorage) SetBatch(ctx context.Context, metrics []models.Metrics) 
 		return nil
 	}
 
-	values := make([]interface{}, len(metrics))
-	for i, metric := range metrics {
-		value, err := batchMetricValue(metric)
-		if err != nil {
+	for _, metric := range metrics {
+		if err := validateBatchMetric(metric); err != nil {
 			return err
 		}
-		values[i] = value
 	}
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	for i, metric := range metrics {
+	for _, metric := range metrics {
 		switch metric.MType {
 		case models.Gauge:
-			s.data[metric.ID] = values[i].(float64)
+			s.data[metric.ID] = *metric.Value
 		case models.Counter:
 			current, _ := s.data[metric.ID].(int)
-			s.data[metric.ID] = current + values[i].(int)
+			s.data[metric.ID] = current + int(*metric.Delta)
 		}
 	}
 
@@ -79,7 +76,7 @@ func (s *MemoryStorage) GetAll(ctx context.Context) (map[string]interface{}, err
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	result := make(map[string]interface{})
+	result := make(map[string]interface{}, len(s.data))
 
 	for key, value := range s.data {
 		result[key] = value
