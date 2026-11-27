@@ -8,26 +8,35 @@ import (
 
 // Вынес отдельно - не хотел повторять да и как будто тут еще что-то может быть
 func batchMetricValue(metric models.Metrics) (interface{}, error) {
+	if err := validateBatchMetric(metric); err != nil {
+		return nil, err
+	}
+	if metric.MType == models.Gauge {
+		return *metric.Value, nil
+	}
+	return int(*metric.Delta), nil
+}
+
+func validateBatchMetric(metric models.Metrics) error {
 	if metric.ID == "" {
-		return nil, errors.New("metric name is empty")
+		return errors.New("metric name is empty")
 	}
 
 	switch metric.MType {
 	case models.Gauge:
 		if metric.Value == nil {
-			return nil, errors.New("gauge has no value")
+			return errors.New("gauge has no value")
 		}
-		return *metric.Value, nil
 	case models.Counter:
 		if metric.Delta == nil {
-			return nil, errors.New("counter has no delta")
+			return errors.New("counter has no delta")
 		}
 		counter := int(*metric.Delta)
 		if int64(counter) != *metric.Delta {
-			return nil, errors.New("counter overflows int")
+			return errors.New("counter overflows int")
 		}
-		return counter, nil
 	default:
-		return nil, errors.New("unknown metric type")
+		return errors.New("unknown metric type")
 	}
+	return nil
 }

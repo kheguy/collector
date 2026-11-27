@@ -3,9 +3,11 @@ package middlewares
 import (
 	"bytes"
 	"compress/gzip"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -67,6 +69,55 @@ func TestWithGzipDoesNotCompressUnsupportedContentType(t *testing.T) {
 
 	require.Empty(t, recorder.Header().Get("Content-Encoding"))
 	require.Equal(t, "OK", recorder.Body.String())
+}
+
+func TestWithGzipCompressesSequentialResponses(t *testing.T) {
+	bodies := []string{
+		`{"id":"Alloc","type":"gauge","value":16777216}`,
+		`{"id":"PollCount","type":"counter","delta":7}`,
+	}
+	handler := WithGzip(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, err := io.Copy(w, r.Body)
+		require.NoError(t, err)
+	}))
+
+	responses := make([]*httptest.ResponseRecorder, len(bodies))
+	for i, body := range bodies {
+		req := httptest.NewRequest(http.MethodPost, "/updates/", strings.NewReader(body))
+		req.Header.Set("Accept-Encoding", "gzip")
+		responses[i] = httptest.NewRecorder()
+		handler.ServeHTTP(responses[i], req)
+	}
+
+	for i, response := range responses {
+		require.Equal(t, http.StatusOK, response.Code)
+		require.Equal(t, "gzip", response.Header().Get("Content-Encoding"))
+		require.Equal(t, bodies[i], string(gunzipBytes(t, response.Body.Bytes())))
+	}
+}
+
+func TestWithGzipCompressesParallelResponses(t *testing.T) {
+	for _, name := range []string{"Alloc", "HeapAlloc", "Sys", "CPUutilization1"} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			body := fmt.Sprintf(`{"id":"%s","type":"gauge","value":12.5}`, name)
+			handler := WithGzip(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				_, err := io.Copy(w, r.Body)
+				require.NoError(t, err)
+			}))
+			req := httptest.NewRequest(http.MethodPost, "/updates/", strings.NewReader(body))
+			req.Header.Set("Accept-Encoding", "gzip")
+			response := httptest.NewRecorder()
+
+			handler.ServeHTTP(response, req)
+
+			require.Equal(t, http.StatusOK, response.Code)
+			require.Equal(t, "gzip", response.Header().Get("Content-Encoding"))
+			require.Equal(t, body, string(gunzipBytes(t, response.Body.Bytes())))
+		})
+	}
 }
 
 func gzipBytes(t *testing.T, data []byte) []byte {

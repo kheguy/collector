@@ -23,6 +23,8 @@ type ServerConfig struct {
 	Restore         bool   `env:"RESTORE"`
 	DBAddress       string `env:"DATABASE_DSN"`
 	Key             string `env:"KEY"`
+	AuditFile       string `env:"AUDIT_FILE"`
+	AuditURL        string `env:"AUDIT_URL"`
 }
 
 // Разделил так как уже путаница началась
@@ -69,6 +71,8 @@ func LoadServer() (ServerConfig, error) {
 	flags.BoolVar(&cfg.Restore, "r", cfg.Restore, "Restore metrics")
 	flags.StringVar(&cfg.DBAddress, "d", cfg.DBAddress, "Database address")
 	flags.StringVar(&cfg.Key, "k", cfg.Key, "Hash signing key")
+	flags.StringVar(&cfg.AuditFile, "audit-file", cfg.AuditFile, "Audit log file path")
+	flags.StringVar(&cfg.AuditURL, "audit-url", cfg.AuditURL, "Audit log receiver URL")
 
 	if err := flags.Parse(os.Args[1:]); err != nil {
 		return ServerConfig{}, err

@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 	"math/rand/v2"
 	"net/http"
@@ -17,6 +18,12 @@ import (
 	"github.com/kheguy/collector/internal/repository"
 	"github.com/kheguy/collector/internal/signature"
 )
+
+var gzipWriterPool = sync.Pool{
+	New: func() interface{} {
+		return gzip.NewWriter(io.Discard)
+	},
+}
 
 type Agent struct {
 	storage    *repository.MemoryStorage
@@ -192,7 +199,12 @@ func (a *Agent) sendMetricsBatch(ctx context.Context, metrics map[string]interfa
 
 func compress(data []byte) ([]byte, error) {
 	var buffer bytes.Buffer
-	writer := gzip.NewWriter(&buffer)
+	writer := gzipWriterPool.Get().(*gzip.Writer)
+	writer.Reset(&buffer)
+	defer func() {
+		writer.Reset(io.Discard)
+		gzipWriterPool.Put(writer)
+	}()
 	if _, err := writer.Write(data); err != nil {
 		return nil, err
 	}

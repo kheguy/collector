@@ -30,6 +30,53 @@ func TestLoadServerReadsKeyFromEnvironment(t *testing.T) {
 	require.Equal(t, "env-secret", cfg.Key)
 }
 
+func TestLoadServerAuditConfig(t *testing.T) {
+	tests := []struct {
+		name      string
+		args      []string
+		env       map[string]string
+		auditFile string
+		auditURL  string
+	}{
+		{
+			name: "disabled by default",
+		},
+		{
+			name:      "flags",
+			args:      []string{"--audit-file=/tmp/audit.jsonl", "--audit-url=http://localhost:8081/audit"},
+			auditFile: "/tmp/audit.jsonl",
+			auditURL:  "http://localhost:8081/audit",
+		},
+		{
+			name: "environment overrides flags",
+			args: []string{"--audit-file=/tmp/flag-audit.jsonl", "--audit-url=http://localhost:8081/audit"},
+			env: map[string]string{
+				"AUDIT_FILE": "/tmp/env-audit.jsonl",
+				"AUDIT_URL":  "http://localhost:8082/audit",
+			},
+			auditFile: "/tmp/env-audit.jsonl",
+			auditURL:  "http://localhost:8082/audit",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Cleanup(replaceArgs(append([]string{"server"}, tt.args...)...))
+			t.Cleanup(unsetEnv("AUDIT_FILE"))
+			t.Cleanup(unsetEnv("AUDIT_URL"))
+			for name, value := range tt.env {
+				t.Setenv(name, value)
+			}
+
+			cfg, err := LoadServer()
+
+			require.NoError(t, err)
+			require.Equal(t, tt.auditFile, cfg.AuditFile)
+			require.Equal(t, tt.auditURL, cfg.AuditURL)
+		})
+	}
+}
+
 func TestLoadAgentReadsRateLimitFromFlag(t *testing.T) {
 	restoreArgs := replaceArgs("agent", "-l=3")
 	t.Cleanup(restoreArgs)
