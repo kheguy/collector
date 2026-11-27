@@ -12,11 +12,13 @@ import (
 	"time"
 )
 
+// HTTPObserver отправляет события аудита по HTTP
 type HTTPObserver struct {
 	url    string
 	client *http.Client
 }
 
+// NewHTTPObserver создаёт отправителя событий по указанному адресу HTTP или HTTPS
 func NewHTTPObserver(address string) (*HTTPObserver, error) {
 	u, err := url.Parse(address)
 	if err != nil {
@@ -37,6 +39,7 @@ func NewHTTPObserver(address string) (*HTTPObserver, error) {
 	}, nil
 }
 
+// Notify отправляет событие в JSON и возвращает ошибку при ответе вне диапазона 2xx
 func (o *HTTPObserver) Notify(ctx context.Context, event Event) error {
 	data, err := json.Marshal(event)
 	if err != nil {

@@ -8,20 +8,24 @@ import (
 	models "github.com/kheguy/collector/internal/model"
 )
 
+// FileProcessor сохраняет метрики в файл JSON и восстанавливает их из него
 type FileProcessor struct {
 	path string
 }
 
+// Ping всегда возвращает nil и не проверяет доступность файла
 func (f *FileProcessor) Ping(context.Context) error {
 	return nil
 }
 
+// NewFileProcessor создаёт обработчик файла по указанному пути
 func NewFileProcessor(p string) *FileProcessor {
 	return &FileProcessor{
 		path: p,
 	}
 }
 
+// Save перезаписывает файл метриками с типами int и float64
 func (f *FileProcessor) Save(d map[string]interface{}) error {
 	metrics := make([]models.Metrics, 0, len(d))
 
@@ -48,6 +52,8 @@ func (f *FileProcessor) Save(d map[string]interface{}) error {
 	return os.WriteFile(f.path, data, 0666)
 }
 
+// Restore загружает метрики из файла
+// Если файл отсутствует или пустой возвращает пустую карту без ошибки
 func (f *FileProcessor) Restore() (map[string]interface{}, error) {
 	d := make(map[string]interface{})
 	data, err := os.ReadFile(f.path)

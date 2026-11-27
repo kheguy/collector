@@ -1,10 +1,13 @@
 package models
 
 const (
+	// Counter обозначает целочисленный счётчик с накоплением значений
 	Counter = "counter"
-	Gauge   = "gauge"
+	// Gauge обозначает метрику с заменяемым значением float64
+	Gauge = "gauge"
 )
 
+// MetricItem содержит имя и строковое значение метрики для HTML страницы
 type MetricItem struct {
 	Name  string
 	Value string
@@ -15,6 +18,9 @@ type MetricItem struct {
 // Delta и Value объявлены через указатели,
 // что бы отличать значение "0", от не заданного значения
 // и соответственно не кодировать в структуру.
+
+// Metrics описывает метрику в запросах JSON, ответах и файле хранилища
+// Delta и Value указатели, чтобы отличать ноль от отсутствующего значения
 type Metrics struct {
 	ID    string   `json:"id"`
 	MType string   `json:"type"`

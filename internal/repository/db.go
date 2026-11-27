@@ -16,6 +16,7 @@ type commandExecutor interface {
 	Exec(context.Context, string, ...any) (pgconn.CommandTag, error)
 }
 
+// Pool описывает операции пула PostgreSQL, используемые хранилищем
 type Pool interface {
 	commandExecutor
 	Query(context.Context, string, ...any) (pgx.Rows, error)
@@ -23,16 +24,19 @@ type Pool interface {
 	Begin(context.Context) (pgx.Tx, error)
 }
 
+// DBStorage хранит метрики в PostgreSQL
 type DBStorage struct {
 	pool Pool
 }
 
+// NewDBStorage создаёт хранилище с переданным пулом соединений
 func NewDBStorage(p Pool) *DBStorage {
 	return &DBStorage{
 		pool: p,
 	}
 }
 
+// Get возвращает значение метрики по имени, если метрики нет возвращает nil
 func (s *DBStorage) Get(ctx context.Context, name string) (interface{}, error) {
 	var result interface{}
 	err := retry.Do(ctx, func() error {
@@ -64,12 +68,14 @@ func (s *DBStorage) Get(ctx context.Context, name string) (interface{}, error) {
 	return result, err
 }
 
+// Set заменяет значение gauge или прибавляет значение к counter
 func (s *DBStorage) Set(ctx context.Context, name string, mType string, value interface{}) error {
 	return retry.Do(ctx, func() error {
 		return upsertMetric(ctx, s.pool, name, mType, value)
 	}, isRetriablePostgresError)
 }
 
+// SetBatch проверяет весь пакет и сохраняет его в одной транзакции
 func (s *DBStorage) SetBatch(ctx context.Context, metrics []models.Metrics) error {
 	if len(metrics) == 0 {
 		return nil
@@ -166,6 +172,7 @@ func upsertMetricQuery(name string, mType string, value interface{}) (string, []
 	}
 }
 
+// GetAll возвращает все метрики из базы данных
 func (s *DBStorage) GetAll(ctx context.Context) (map[string]interface{}, error) {
 	var result map[string]interface{}
 	err := retry.Do(ctx, func() error {
@@ -209,6 +216,7 @@ func (s *DBStorage) getAllOnce(ctx context.Context) (map[string]interface{}, err
 	return result, nil
 }
 
+// SetAll заменяет все метрики в одной транзакции
 func (s *DBStorage) SetAll(ctx context.Context, data map[string]interface{}) error {
 	return retry.Do(ctx, func() error {
 		return s.setAllOnce(ctx, data)
@@ -241,6 +249,7 @@ func (s *DBStorage) setAllOnce(ctx context.Context, data map[string]interface{})
 	return nil
 }
 
+// Clear удаляет все метрики из базы данных
 func (s *DBStorage) Clear(ctx context.Context) error {
 	return retry.Do(ctx, func() error {
 		_, err := s.pool.Exec(ctx, "DELETE FROM metrics")

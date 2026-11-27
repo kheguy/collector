@@ -9,19 +9,25 @@ import (
 	"github.com/kheguy/collector/internal/retry"
 )
 
+// HTTPClient выполняет HTTP запросы
 type HTTPClient interface {
+	// Do отправляет запрос и возвращает ответ сервера
 	Do(*http.Request) (*http.Response, error)
 }
 
+// RetryClient повторяет запросы при ошибках установления соединения
 type RetryClient struct {
 	client HTTPClient
 	retry  func(context.Context, func() error, func(error) bool) error
 }
 
+// NewRetryClient создаёт HTTP клиент с повторными попытками подключения
 func NewRetryClient(client HTTPClient) *RetryClient {
 	return &RetryClient{client: client, retry: retry.Do}
 }
 
+// Do отправляет запрос и повторяет его при ошибке установления соединения
+// Для повторной отправки тела запроса должно быть задано поле GetBody
 func (c *RetryClient) Do(req *http.Request) (*http.Response, error) {
 	var response *http.Response
 	attemptNumber := 0

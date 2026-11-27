@@ -55,6 +55,7 @@ func (w *gzipResponseWriter) Close() error {
 	return err
 }
 
+// WithGzip распаковывает запросы gzip и сжимает ответы JSON и HTML, если клиент поддерживает gzip
 func WithGzip(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if strings.Contains(r.Header.Get("Content-Encoding"), "gzip") {

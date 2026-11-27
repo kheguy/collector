@@ -7,11 +7,13 @@ import (
 	"sync"
 )
 
+// FileObserver записывает события аудита в файл, по одному JSON объекту на строку
 type FileObserver struct {
 	mu   sync.Mutex
 	file *os.File
 }
 
+// NewFileObserver открывает файл для добавления событий и создаёт его при необходимости
 func NewFileObserver(path string) (*FileObserver, error) {
 	file, err := os.OpenFile(path, os.O_CREATE|os.O_RDWR|os.O_APPEND, 0666)
 	if err != nil {
@@ -39,6 +41,7 @@ func ensureNewline(file *os.File) error {
 	return err
 }
 
+// Notify добавляет событие в файл
 func (o *FileObserver) Notify(_ context.Context, event Event) error {
 	o.mu.Lock()
 	defer o.mu.Unlock()
@@ -46,6 +49,7 @@ func (o *FileObserver) Notify(_ context.Context, event Event) error {
 	return json.NewEncoder(o.file).Encode(event)
 }
 
+// Close закрывает файл аудита
 func (o *FileObserver) Close() error {
 	o.mu.Lock()
 	defer o.mu.Unlock()

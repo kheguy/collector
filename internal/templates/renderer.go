@@ -5,10 +5,12 @@ import (
 	"net/http"
 )
 
+// TemplateRenderer выводит HTML страницы по загруженным шаблонам
 type TemplateRenderer struct {
 	templates map[string]*template.Template
 }
 
+// MakeNewTemplateRenderer загружает шаблоны страницы со списком метрик
 func MakeNewTemplateRenderer() (*TemplateRenderer, error) {
 	templates := make(map[string]*template.Template)
 
@@ -27,6 +29,7 @@ func MakeNewTemplateRenderer() (*TemplateRenderer, error) {
 	}, nil
 }
 
+// Render выводит шаблон с данными, если шаблон не найден возвращает 404
 func (r *TemplateRenderer) Render(w http.ResponseWriter, name string, data interface{}) {
 	tmpl, ok := r.templates[name]
 	if !ok {
