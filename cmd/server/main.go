@@ -12,6 +12,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
+	"github.com/kheguy/collector/internal/audit"
 	"github.com/kheguy/collector/internal/config"
 	"github.com/kheguy/collector/internal/database"
 	"github.com/kheguy/collector/internal/handler"
@@ -108,7 +109,24 @@ func main() {
 
 	metricsService := service.MakeNewMetricsService(storage)
 
-	metricsHandler := handler.MakeNewMetricsHandler(metricsService, renderer)
+	var observers []audit.Observer
+	if cfg.AuditFile != "" {
+		fileObserver, err := audit.NewFileObserver(cfg.AuditFile)
+		if err != nil {
+			log.Fatal("Audit file initialization error: ", err)
+		}
+		defer fileObserver.Close()
+		observers = append(observers, fileObserver)
+	}
+	if cfg.AuditURL != "" {
+		httpObserver, err := audit.NewHTTPObserver(cfg.AuditURL)
+		if err != nil {
+			log.Fatal("Audit URL initialization error: ", err)
+		}
+		observers = append(observers, httpObserver)
+	}
+
+	metricsHandler := handler.MakeNewMetricsHandler(metricsService, renderer, observers...)
 
 	r.Post(`/update/{type}/{name}/{value}`, metricsHandler.UpdateHandler)
 	r.Post(`/update`, metricsHandler.JSONUpdateHandler)
