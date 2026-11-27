@@ -4,9 +4,13 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"log"
+	"net"
 	"net/http"
 	"strconv"
+	"time"
 
+	"github.com/kheguy/collector/internal/audit"
 	models "github.com/kheguy/collector/internal/model"
 	metricservice "github.com/kheguy/collector/internal/service"
 )
@@ -26,13 +30,18 @@ type Renderer interface {
 type MetricsHandler struct {
 	service  Service
 	renderer Renderer
+	audit    *audit.Publisher
 }
 
-func MakeNewMetricsHandler(s Service, r Renderer) *MetricsHandler {
-	return &MetricsHandler{
+func MakeNewMetricsHandler(s Service, r Renderer, observers ...audit.Observer) *MetricsHandler {
+	h := &MetricsHandler{
 		service:  s,
 		renderer: r,
 	}
+	if len(observers) > 0 {
+		h.audit = audit.NewPublisher(observers...)
+	}
+	return h
 }
 
 func (h *MetricsHandler) ValueHandler(res http.ResponseWriter, req *http.Request) {
@@ -76,6 +85,7 @@ func (h *MetricsHandler) UpdateHandler(res http.ResponseWriter, req *http.Reques
 		return
 	}
 
+	h.notifyAudit(req, []string{name})
 	res.WriteHeader(http.StatusOK)
 	res.Write([]byte(`OK`))
 }
@@ -127,6 +137,7 @@ func (h *MetricsHandler) JSONUpdateHandler(res http.ResponseWriter, req *http.Re
 		return
 	}
 	metric = makeMetric(metric.ID, metric.MType, stored)
+	h.notifyAudit(req, []string{metric.ID})
 	writeJSON(res, http.StatusOK, metric)
 }
 
@@ -142,8 +153,34 @@ func (h *MetricsHandler) JSONBatchUpdateHandler(res http.ResponseWriter, req *ht
 		return
 	}
 
+	if h.audit != nil {
+		names := make([]string, len(metrics))
+		for i, metric := range metrics {
+			names[i] = metric.ID
+		}
+		h.notifyAudit(req, names)
+	}
 	res.Header().Set("Content-Type", "application/json")
 	res.WriteHeader(http.StatusOK)
+}
+
+func (h *MetricsHandler) notifyAudit(req *http.Request, names []string) {
+	if h.audit == nil {
+		return
+	}
+
+	ip, _, err := net.SplitHostPort(req.RemoteAddr)
+	if err != nil {
+		ip = req.RemoteAddr
+	}
+	event := audit.Event{
+		Timestamp: time.Now().Unix(),
+		Metrics:   names,
+		IPAddress: ip,
+	}
+	if err := h.audit.Notify(req.Context(), event); err != nil {
+		log.Printf("Audit error: %v", err)
+	}
 }
 
 func (h *MetricsHandler) JSONValueHandler(res http.ResponseWriter, req *http.Request) {

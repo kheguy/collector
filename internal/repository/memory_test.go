@@ -84,10 +84,14 @@ func TestMemoryStorage_SetBatch_MixedAndDuplicateMetrics(t *testing.T) {
 func TestMemoryStorage_SetBatch_ValidationIsAtomic(t *testing.T) {
 	storage := NewMemoryStorage()
 	ctx := context.Background()
-	gauge := 1.5
+	require.NoError(t, storage.Set(ctx, "temperature", models.Gauge, 1.5))
+	require.NoError(t, storage.Set(ctx, "requests", models.Counter, 5))
+	gauge, delta := 2.5, int64(2)
 	metrics := []models.Metrics{
 		{ID: "temperature", MType: models.Gauge, Value: &gauge},
-		{ID: "requests", MType: models.Counter},
+		{ID: "requests", MType: models.Counter, Delta: &delta},
+		{ID: "new-metric", MType: models.Gauge, Value: &gauge},
+		{ID: "invalid", MType: models.Counter},
 	}
 
 	err := storage.SetBatch(ctx, metrics)
@@ -95,7 +99,10 @@ func TestMemoryStorage_SetBatch_ValidationIsAtomic(t *testing.T) {
 	assert.EqualError(t, err, "counter has no delta")
 	got, getErr := storage.GetAll(ctx)
 	require.NoError(t, getErr)
-	assert.Empty(t, got)
+	assert.Equal(t, map[string]interface{}{
+		"temperature": 1.5,
+		"requests":    5,
+	}, got)
 }
 
 func TestMemoryStorage_Get_NotFound(t *testing.T) {

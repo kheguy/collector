@@ -21,13 +21,15 @@ func TestValueHandler_Success(t *testing.T) {
 
 	serviceMock := mocks.NewMockService(t)
 	serviceMock.EXPECT().GetMetric(req.Context(), "test").Return("Brrrrrrbzzzzzzz", nil).Once()
-	handler := MakeNewMetricsHandler(serviceMock, mocks.NewMockRenderer(t))
+	observer := &recordingObserver{}
+	handler := MakeNewMetricsHandler(serviceMock, mocks.NewMockRenderer(t), observer)
 	w := httptest.NewRecorder()
 
 	handler.ValueHandler(w, req)
 
 	assert.Equal(t, http.StatusOK, w.Code)
 	assert.Equal(t, "Brrrrrrbzzzzzzz", w.Body.String())
+	assert.Empty(t, observer.events)
 }
 
 func TestValueHandler_NotFound(t *testing.T) {
@@ -93,12 +95,14 @@ func TestUpdateHandler_ServiceError(t *testing.T) {
 
 	serviceMock := mocks.NewMockService(t)
 	serviceMock.EXPECT().UpdateMetrics(req.Context(), "test", "gauge", "404").Return(assert.AnError).Once()
-	handler := MakeNewMetricsHandler(serviceMock, mocks.NewMockRenderer(t))
+	observer := &recordingObserver{}
+	handler := MakeNewMetricsHandler(serviceMock, mocks.NewMockRenderer(t), observer)
 	w := httptest.NewRecorder()
 
 	handler.UpdateHandler(w, req)
 
 	assert.Equal(t, http.StatusInternalServerError, w.Code)
+	assert.Empty(t, observer.events)
 }
 
 func TestUpdateHandler_InvalidMetric(t *testing.T) {
@@ -112,12 +116,14 @@ func TestUpdateHandler_InvalidMetric(t *testing.T) {
 		UpdateMetrics(req.Context(), "test", "gauge", "invalid").
 		Return(metricservice.ErrInvalidMetric).
 		Once()
-	handler := MakeNewMetricsHandler(serviceMock, mocks.NewMockRenderer(t))
+	observer := &recordingObserver{}
+	handler := MakeNewMetricsHandler(serviceMock, mocks.NewMockRenderer(t), observer)
 	w := httptest.NewRecorder()
 
 	handler.UpdateHandler(w, req)
 
 	assert.Equal(t, http.StatusBadRequest, w.Code)
+	assert.Empty(t, observer.events)
 }
 
 func TestJSONUpdateHandler_GaugeSuccess(t *testing.T) {
@@ -165,12 +171,14 @@ func TestJSONUpdateHandler_GetStoredMetricError(t *testing.T) {
 		GetRawMetric(req.Context(), "temperature").
 		Return(nil, assert.AnError).
 		Once()
-	handler := MakeNewMetricsHandler(serviceMock, mocks.NewMockRenderer(t))
+	observer := &recordingObserver{}
+	handler := MakeNewMetricsHandler(serviceMock, mocks.NewMockRenderer(t), observer)
 	w := httptest.NewRecorder()
 
 	handler.JSONUpdateHandler(w, req)
 
 	assert.Equal(t, http.StatusInternalServerError, w.Code)
+	assert.Empty(t, observer.events)
 }
 
 func TestJSONBatchUpdateHandler_Success(t *testing.T) {
@@ -198,13 +206,15 @@ func TestJSONBatchUpdateHandler_Success(t *testing.T) {
 
 func TestJSONBatchUpdateHandler_InvalidJSON(t *testing.T) {
 	serviceMock := mocks.NewMockService(t)
-	handler := MakeNewMetricsHandler(serviceMock, mocks.NewMockRenderer(t))
+	observer := &recordingObserver{}
+	handler := MakeNewMetricsHandler(serviceMock, mocks.NewMockRenderer(t), observer)
 	req := httptest.NewRequest(http.MethodPost, "/updates/", strings.NewReader(`[{"id":`))
 	w := httptest.NewRecorder()
 
 	handler.JSONBatchUpdateHandler(w, req)
 
 	assert.Equal(t, http.StatusBadRequest, w.Code)
+	assert.Empty(t, observer.events)
 }
 
 func TestJSONBatchUpdateHandler_ServiceError(t *testing.T) {
@@ -217,12 +227,14 @@ func TestJSONBatchUpdateHandler_ServiceError(t *testing.T) {
 	)
 	serviceMock := mocks.NewMockService(t)
 	serviceMock.EXPECT().UpdateMetricsBatch(req.Context(), metrics).Return(assert.AnError).Once()
-	handler := MakeNewMetricsHandler(serviceMock, mocks.NewMockRenderer(t))
+	observer := &recordingObserver{}
+	handler := MakeNewMetricsHandler(serviceMock, mocks.NewMockRenderer(t), observer)
 	w := httptest.NewRecorder()
 
 	handler.JSONBatchUpdateHandler(w, req)
 
 	assert.Equal(t, http.StatusInternalServerError, w.Code)
+	assert.Empty(t, observer.events)
 }
 
 func TestJSONValueHandler_Success(t *testing.T) {
@@ -233,7 +245,8 @@ func TestJSONValueHandler_Success(t *testing.T) {
 	)
 	serviceMock := mocks.NewMockService(t)
 	serviceMock.EXPECT().GetRawMetric(req.Context(), "requests").Return(7, nil).Once()
-	handler := MakeNewMetricsHandler(serviceMock, mocks.NewMockRenderer(t))
+	observer := &recordingObserver{}
+	handler := MakeNewMetricsHandler(serviceMock, mocks.NewMockRenderer(t), observer)
 	w := httptest.NewRecorder()
 
 	handler.JSONValueHandler(w, req)
@@ -245,6 +258,7 @@ func TestJSONValueHandler_Success(t *testing.T) {
 	assert.Equal(t, models.Counter, got.MType)
 	require.NotNil(t, got.Delta)
 	assert.Equal(t, int64(7), *got.Delta)
+	assert.Empty(t, observer.events)
 }
 
 func TestJSONValueHandler_NotFound(t *testing.T) {
@@ -280,11 +294,13 @@ func TestHTMLListHandler(t *testing.T) {
 		},
 	).Once()
 
-	handler := MakeNewMetricsHandler(serviceMock, rendererMock)
+	observer := &recordingObserver{}
+	handler := MakeNewMetricsHandler(serviceMock, rendererMock, observer)
 	w := httptest.NewRecorder()
 
 	handler.HTMLListHandler(w, req)
 
 	assert.Equal(t, http.StatusOK, w.Code)
 	require.NotNil(t, capturedData)
+	assert.Empty(t, observer.events)
 }
