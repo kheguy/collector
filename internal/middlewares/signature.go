@@ -38,6 +38,7 @@ func (w *signatureResponseWriter) flush(key string) {
 	_, _ = w.ResponseWriter.Write(w.body.Bytes())
 }
 
+// WithSignature проверяет подпись запроса и подписывает ответ, пустой ключ отключает проверку и подпись
 func WithSignature(key string) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		if key == "" {

@@ -7,8 +7,11 @@ import (
 	"github.com/shirou/gopsutil/v4/mem"
 )
 
+// SystemMetrics предоставляет сведения о памяти и загрузке процессоров
 type SystemMetrics interface {
+	// VirtualMemory возвращает общий и свободный объём памяти в байтах
 	VirtualMemory(context.Context) (uint64, uint64, error)
+	// CPUPercent возвращает загрузку каждого логического процессора в процентах
 	CPUPercent(context.Context) ([]float64, error)
 }
 

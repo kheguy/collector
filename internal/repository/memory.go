@@ -7,21 +7,25 @@ import (
 	models "github.com/kheguy/collector/internal/model"
 )
 
+// MemoryStorage хранит метрики в памяти
 type MemoryStorage struct {
 	data map[string]interface{}
 	mu   sync.Mutex
 }
 
+// NewMemoryStorage создаёт пустое хранилище метрик
 func NewMemoryStorage() *MemoryStorage {
 	return &MemoryStorage{
 		data: make(map[string]interface{}),
 	}
 }
 
+// Ping всегда возвращает nil
 func (s *MemoryStorage) Ping(context.Context) error {
 	return nil
 }
 
+// Get возвращает значение метрики по имени, если метрики нет возвращает nil
 func (s *MemoryStorage) Get(ctx context.Context, name string) (interface{}, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -29,6 +33,7 @@ func (s *MemoryStorage) Get(ctx context.Context, name string) (interface{}, erro
 	return s.data[name], nil
 }
 
+// Set заменяет значение gauge или прибавляет значение к counter
 func (s *MemoryStorage) Set(ctx context.Context, name string, mType string, value interface{}) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -45,41 +50,41 @@ func (s *MemoryStorage) Set(ctx context.Context, name string, mType string, valu
 	return nil
 }
 
+// SetBatch проверяет весь пакет и применяет его под одной блокировкой
+// При ошибке проверки метрики не меняются
 func (s *MemoryStorage) SetBatch(ctx context.Context, metrics []models.Metrics) error {
 	if len(metrics) == 0 {
 		return nil
 	}
 
-	values := make([]interface{}, len(metrics))
-	for i, metric := range metrics {
-		value, err := batchMetricValue(metric)
-		if err != nil {
+	for _, metric := range metrics {
+		if err := validateBatchMetric(metric); err != nil {
 			return err
 		}
-		values[i] = value
 	}
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	for i, metric := range metrics {
+	for _, metric := range metrics {
 		switch metric.MType {
 		case models.Gauge:
-			s.data[metric.ID] = values[i].(float64)
+			s.data[metric.ID] = *metric.Value
 		case models.Counter:
 			current, _ := s.data[metric.ID].(int)
-			s.data[metric.ID] = current + values[i].(int)
+			s.data[metric.ID] = current + int(*metric.Delta)
 		}
 	}
 
 	return nil
 }
 
+// GetAll возвращает копию карты метрик
 func (s *MemoryStorage) GetAll(ctx context.Context) (map[string]interface{}, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	result := make(map[string]interface{})
+	result := make(map[string]interface{}, len(s.data))
 
 	for key, value := range s.data {
 		result[key] = value
@@ -88,6 +93,7 @@ func (s *MemoryStorage) GetAll(ctx context.Context) (map[string]interface{}, err
 	return result, nil
 }
 
+// TakeAll возвращает текущую карту метрик, заменяя её в хранилище пустой
 func (s *MemoryStorage) TakeAll(ctx context.Context) (map[string]interface{}, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -98,6 +104,7 @@ func (s *MemoryStorage) TakeAll(ctx context.Context) (map[string]interface{}, er
 	return result, nil
 }
 
+// Restore возвращает неотправленные метрики, счётчики суммируются, текущие значения gauge сохраняются
 func (s *MemoryStorage) Restore(ctx context.Context, data map[string]interface{}) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -117,6 +124,7 @@ func (s *MemoryStorage) Restore(ctx context.Context, data map[string]interface{}
 	return nil
 }
 
+// SetAll заменяет все метрики переданной картой без копирования
 func (s *MemoryStorage) SetAll(ctx context.Context, d map[string]interface{}) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -125,6 +133,7 @@ func (s *MemoryStorage) SetAll(ctx context.Context, d map[string]interface{}) er
 	return nil
 }
 
+// Clear удаляет все метрики
 func (s *MemoryStorage) Clear(ctx context.Context) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()

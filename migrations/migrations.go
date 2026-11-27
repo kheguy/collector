@@ -12,6 +12,7 @@ import (
 //go:embed *.sql
 var files embed.FS
 
+// Up применяет встроенные SQL миграции к базе данных
 func Up(databaseDSN string) error {
 	source, err := iofs.New(files, ".")
 	if err != nil {

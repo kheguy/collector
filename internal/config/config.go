@@ -8,6 +8,8 @@ import (
 	"github.com/caarlos0/env/v11"
 )
 
+// AgentConfig содержит настройки агента
+// Интервалы задаются в секундах
 type AgentConfig struct {
 	Address        string `env:"ADDRESS"`
 	ReportInterval int    `env:"REPORT_INTERVAL"`
@@ -16,6 +18,8 @@ type AgentConfig struct {
 	RateLimit      int    `env:"RATE_LIMIT"`
 }
 
+// ServerConfig содержит настройки сервера
+// StoreInterval задаётся в секундах
 type ServerConfig struct {
 	Address         string `env:"ADDRESS"`
 	StoreInterval   int    `env:"STORE_INTERVAL"`
@@ -23,9 +27,14 @@ type ServerConfig struct {
 	Restore         bool   `env:"RESTORE"`
 	DBAddress       string `env:"DATABASE_DSN"`
 	Key             string `env:"KEY"`
+	AuditFile       string `env:"AUDIT_FILE"`
+	AuditURL        string `env:"AUDIT_URL"`
 }
 
 // Разделил так как уже путаница началась
+
+// LoadAgent читает настройки агента из флагов и переменных окружения
+// Переменные окружения имеют приоритет над флагами
 func LoadAgent() (AgentConfig, error) {
 	cfg := AgentConfig{
 		Address:        "localhost:8080",
@@ -53,6 +62,8 @@ func LoadAgent() (AgentConfig, error) {
 	return cfg, nil
 }
 
+// LoadServer читает настройки сервера из флагов и переменных окружения
+// Переменные окружения имеют приоритет над флагами
 func LoadServer() (ServerConfig, error) {
 	cfg := ServerConfig{
 		Address:         "localhost:8080",
@@ -69,6 +80,8 @@ func LoadServer() (ServerConfig, error) {
 	flags.BoolVar(&cfg.Restore, "r", cfg.Restore, "Restore metrics")
 	flags.StringVar(&cfg.DBAddress, "d", cfg.DBAddress, "Database address")
 	flags.StringVar(&cfg.Key, "k", cfg.Key, "Hash signing key")
+	flags.StringVar(&cfg.AuditFile, "audit-file", cfg.AuditFile, "Audit log file path")
+	flags.StringVar(&cfg.AuditURL, "audit-url", cfg.AuditURL, "Audit log receiver URL")
 
 	if err := flags.Parse(os.Args[1:]); err != nil {
 		return ServerConfig{}, err

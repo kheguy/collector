@@ -12,6 +12,10 @@ var defaultDelays = []time.Duration{
 }
 
 // Вынес отдельно так как не хочется дублировать
+
+// Do выполняет operation и при ошибке, разрешённой isRetriable, повторяет её
+// до трёх раз с паузами 1, 3 и 5 секунд
+// Отмена ctx прерывает ожидание
 func Do(ctx context.Context, operation func() error, isRetriable func(error) bool) error {
 	return do(ctx, operation, isRetriable, defaultDelays)
 }

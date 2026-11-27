@@ -10,11 +10,13 @@ import (
 	"github.com/kheguy/collector/migrations"
 )
 
+// Client управляет пулом соединений с PostgreSQL и хранилищем метрик
 type Client struct {
 	pool    pool
 	storage *repository.DBStorage
 }
 
+// NewClient применяет миграции, создаёт пул и проверяет подключение к базе данных
 func NewClient(ctx context.Context, dsn string) (*Client, error) {
 	return newClient(
 		ctx,
@@ -57,14 +59,17 @@ func newClient(ctx context.Context, dsn string, migrate migrateFunc, newPool poo
 	}, nil
 }
 
+// Storage возвращает хранилище метрик клиента
 func (c *Client) Storage() *repository.DBStorage {
 	return c.storage
 }
 
+// Ping проверяет подключение к базе данных
 func (c *Client) Ping(ctx context.Context) error {
 	return c.pool.Ping(ctx)
 }
 
+// Close закрывает пул соединений
 func (c *Client) Close() {
 	c.pool.Close()
 }

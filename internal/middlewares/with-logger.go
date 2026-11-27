@@ -30,6 +30,7 @@ func (r *loggingResponseWriter) WriteHeader(statusCode int) {
 	r.responseData.status = statusCode
 }
 
+// WithLogging записывает метод, URI, статус, размер ответа и время обработки запроса в лог
 func WithLogging(h http.Handler) http.Handler {
 	logger, err := zap.NewDevelopment()
 	if err != nil {

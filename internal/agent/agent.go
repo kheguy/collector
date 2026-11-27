@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 	"math/rand/v2"
 	"net/http"
@@ -18,6 +19,13 @@ import (
 	"github.com/kheguy/collector/internal/signature"
 )
 
+var gzipWriterPool = sync.Pool{
+	New: func() interface{} {
+		return gzip.NewWriter(io.Discard)
+	},
+}
+
+// Agent собирает метрики и отправляет их на сервер пакетами
 type Agent struct {
 	storage    *repository.MemoryStorage
 	url        string
@@ -26,6 +34,7 @@ type Agent struct {
 	system     SystemMetrics
 }
 
+// NewAgent создаёт агента для отправки метрик на указанный сервер
 func NewAgent(storage *repository.MemoryStorage, url string, httpClient HTTPClient, key string) *Agent {
 	return &Agent{
 		storage:    storage,
@@ -36,6 +45,8 @@ func NewAgent(storage *repository.MemoryStorage, url string, httpClient HTTPClie
 	}
 }
 
+// Run запускает сбор и отправку метрик до отмены ctx
+// rateLimit задаёт число обработчиков отправки, значения меньше единицы заменяются на 1
 func (a *Agent) Run(ctx context.Context, pollInterval time.Duration, reportInterval time.Duration, rateLimit int) {
 	if rateLimit < 1 {
 		rateLimit = 1
@@ -192,7 +203,12 @@ func (a *Agent) sendMetricsBatch(ctx context.Context, metrics map[string]interfa
 
 func compress(data []byte) ([]byte, error) {
 	var buffer bytes.Buffer
-	writer := gzip.NewWriter(&buffer)
+	writer := gzipWriterPool.Get().(*gzip.Writer)
+	writer.Reset(&buffer)
+	defer func() {
+		writer.Reset(io.Discard)
+		gzipWriterPool.Put(writer)
+	}()
 	if _, err := writer.Write(data); err != nil {
 		return nil, err
 	}
